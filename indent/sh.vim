@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Sat, 18 Nov 2017 18:38:56 +0900
-" Version:          4.49
+" Last Change:      Fri, 24 Nov 2017 12:36:46 +0900
+" Version:          4.50
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -106,7 +106,6 @@ function GetShIndent()
   endfor
 
   let [line, lnum] = s:SkipCommentLine(line, lnum, 0)
-  let line = s:HideCommentStr(line, lnum)
   let line = s:BlankOrContinue(line, lnum, v:lnum - 1)
   let ind = s:BackQuoteIndent(lnum, 0)
   let [line, lnum, ind] = s:GetSkipItemLinesHeadAndTail(line, lnum, ind)
@@ -405,6 +404,7 @@ function s:SkipCommentLine(line, lnum, prev)
     let line = getline(lnum)
   endwhile
   unlet! s:prev_lnum
+  let line = s:HideCommentStr(line, lnum)
 
   return [line, lnum]
 endfunction
@@ -439,7 +439,6 @@ function s:GetPrevContinueLine(line, lnum, ...)
     let lnum = s:prev_lnum
     let line = getline(lnum)
     let [line, lnum] = s:SkipCommentLine(line, lnum, 0)
-    let line = s:HideCommentStr(line, lnum)
     if s:IsTailBackSlash(line) && (blank || lnum != s:prev_lnum)
       break
     endif
@@ -471,8 +470,9 @@ function s:GetNextContinueLine(line, lnum)
   let line = a:line
   let lnum = a:lnum
   while line =~# '\\\@<!\%(\\\\\)*\\$' && s:GetNextNonBlank(lnum) == lnum + 1
+    let line = substitute(line, '\\$', "", "")
     let lnum = s:next_lnum
-    let line = getline(lnum)
+    let line .= getline(lnum)
   endwhile
   unlet! s:next_lnum
 
@@ -903,11 +903,11 @@ function s:IsFunctionLine(line)
 endfunction
 
 function s:IsTailAndOr(line)
-  return a:line =~# '\%(&&\|||\)\s*\%(\\\|#.*\)\=$'
+  return a:line =~# '\%(&&\|||\)\s*\\\=$'
 endfunction
 
 function s:IsTailBar(line)
-  return a:line =~# '|\@<!|\s*\%(\\\|#.*\)\=$'
+  return a:line =~# '|\@<!|\s*\\\=$'
 endfunction
 
 function s:IsTailBackSlash(line)
@@ -921,16 +921,16 @@ function s:IsTailNoContinue(line)
 endfunction
 
 function s:IsContinuLineFore(line)
-  return a:line =~# '\\\@<!\%(\\\\\)*\\$\|\%(&&\|||\)\s*\%(\\\|#.*\)\=$'
+  return a:line =~# '\\\@<!\%(\\\\\)*\\$\|\%(&&\|||\)\s*\\\=$'
 endfunction
 
 function s:IsContinuLinePrev(line)
-  return a:line =~# '\\\@<!\%(\\\\\)*\\$\|\%(&&\|||\=\)\s*\%(\\\|#.*\)\=$'
+  return a:line =~# '\\\@<!\%(\\\\\)*\\$\|\%(&&\|||\=\)\s*\\\=$'
 endfunction
 
 function s:IsInSideCase(line)
   return a:line =~# '\%(^\|[;&|`(){}]\)\s*case\>\%(.*;[;&]\s*\<esac\>\)\@!'
-        \ || a:line =~# ';[;&]\s*\%(#.*\)\=$'
+        \ || a:line =~# ';[;&]\s*$'
 endfunction
 
 function s:EndOfTestQuotes(line, lnum, item)
