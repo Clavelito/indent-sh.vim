@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Fri, 24 Nov 2017 12:36:46 +0900
-" Version:          4.50
+" Last Change:      Sat, 25 Nov 2017 11:12:46 +0900
+" Version:          4.51
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -51,13 +51,14 @@ endif
 let s:cpo_save = &cpo
 set cpo&vim
 
-let s:back_quote = 'shCommandSub'
+let s:back_quote = 'CommandSub'
 let s:sh_comment = 'Comment'
 let s:test_d_or_s_quote = 'TestDoubleQuote\|TestSingleQuote'
 let s:d_or_s_quote = 'DoubleQuote\|SingleQuote\|DblQuote\|SnglQuote'
 let s:sh_quote = 'shQuote'
 let s:sh_here_doc = 'HereDoc'
 let s:sh_here_doc_eof = 'HereDoc\d\d\|shRedir\d\d'
+let s:sh_echo = 'Echo'
 
 if !exists("g:sh_indent_case_labels")
   let g:sh_indent_case_labels = 1
@@ -190,6 +191,9 @@ function s:PrevLineIndent(line, lnum, pline, pnum, ind)
 endfunction
 
 function s:PrevLineIndent0(pline, line, lnum, ind)
+  if s:MatchSynId(a:lnum, 1, s:sh_echo)
+    return a:ind
+  endif
   let line = a:line
   let ind = a:ind
   if line =~# '[|`(;&]\|\%(^\|;\|&\||\)\s*\%(if\s\+\|elif\s\+\)\={'
@@ -241,6 +245,9 @@ function s:PrevLineIndent3(line, ind, sum)
 endfunction
 
 function s:CurrentLineIndent(line, lnum, cline, pline, ind)
+  if s:MatchSynId(v:lnum, 1, s:sh_echo)
+    return a:ind
+  endif
   let ind = a:ind
   if a:cline =~# '^\s*esac\>' && a:line !~ ';[;&]\s*$'
     let ind = s:CaseBreakIndent(ind)
@@ -250,8 +257,7 @@ function s:CurrentLineIndent(line, lnum, cline, pline, ind)
   if a:cline =~# '^\s*\%(;;\|;&\|;;&\)\s*\%(#.*\)\=$'
     let ind = s:CaseBreakIndent(ind) + shiftwidth()
   elseif a:cline =~# '^\s*\%(then\|do\|else\|elif\|fi\|done\)\>[-=+.]\@!'
-        \ || a:cline =~ '^\s*[})]' && !s:IsTailBackSlash(a:line)
-        \ && !s:IsInSideCase(a:line)
+        \ || a:cline =~ '^\s*[})]' && !s:IsInSideCase(a:line)
     let ind = ind - shiftwidth()
   elseif a:cline =~# '^\s*[{(]\s*\%(#.*\)\=$'
         \ && (s:IsTailAndOr(a:line) || s:IsTailBar(a:line))
@@ -286,14 +292,13 @@ endfunction
 
 function s:CloseBraceIndnnt(pline, line, nline, lnum, pnum, ind)
   let ind = a:ind
-  let line = s:HideCommentStr(getline(a:lnum - 1), a:lnum - 1)
-  if a:nline =~# '[;&]\%(\s*\%(done\|fi\|esac\)\)\=\s*}\|^\s\+}'
-        \ && a:nline !~# ';[;&]\s*$' && !s:IsTailBackSlash(line)
+  if a:nline =~# '\%(^\|[;&]\)\%(\s*\%(done\|fi\|esac\)\)\=\s*}\|^\s\+}'
+        \ && a:nline !~# ';[;&]\s*$' && !s:MatchSynId(a:lnum, 1, s:sh_echo)
     if a:line =~ '^\s*}' && !s:IsInSideCase(a:pline)
       let ind = ind + shiftwidth()
     endif
     let ind = ind - shiftwidth() * (len(split(a:nline,
-          \ '[;&]\%(\C\s*\%(done\|fi\|esac\)\)\=\s*}\|^\s\+}', 1)) - 1)
+          \ '\%(^\|[;&]\)\%(\C\s*\%(done\|fi\|esac\)\)\=\s*}\|^\s\+}', 1)) - 1)
     if !s:IsContinuLinePrev(a:nline)
       let ind = s:GetLessIndentLineIndent(a:pnum, ind)
     endif
@@ -315,11 +320,9 @@ function s:ParenBraceIndent(pline, line2, line, lnum, ind)
     let ind = ind + shiftwidth() * (sum - 1)
   endif
   if a:line2 =~# '^\s*\%(if\s\+\|elif\s\+\)\={' && !s:IsInSideCase(a:pline)
-    let line = getline(a:lnum - 1)
-    if !s:IsTailBackSlash(line) || s:IsTailNoContinue(line)
-      let ind = ind + shiftwidth()
-            \ * (len(split(a:line2, '^\s*\C\%(if\s\+\|elif\s\+\)\={', 1)) - 1)
-    endif
+        \ && !s:MatchSynId(a:lnum, 1, s:sh_echo)
+    let ind = ind + shiftwidth()
+          \ * (len(split(a:line2, '^\s*\C\%(if\s\+\|elif\s\+\)\={', 1)) - 1)
   elseif a:line =~# '^\s*\%(if\s\+\|elif\s\+\)\={'
         \ && s:IsInSideCase(a:pline) && a:line !~# ';[;&]\s*$'
     let ind = ind + shiftwidth()
