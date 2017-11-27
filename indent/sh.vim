@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Sat, 25 Nov 2017 11:12:46 +0900
-" Version:          4.51
+" Last Change:      Mon, 27 Nov 2017 11:15:25 +0900
+" Version:          4.52
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -52,7 +52,7 @@ let s:cpo_save = &cpo
 set cpo&vim
 
 let s:back_quote = 'CommandSub'
-let s:sh_comment = 'Comment'
+let s:sh_comment = 'Comment\|Todo'
 let s:test_d_or_s_quote = 'TestDoubleQuote\|TestSingleQuote'
 let s:d_or_s_quote = 'DoubleQuote\|SingleQuote\|DblQuote\|SnglQuote'
 let s:sh_quote = 'shQuote'
@@ -403,6 +403,8 @@ function s:SkipCommentLine(line, lnum, prev)
   endif
   while lnum && line =~ '^\s*#' && s:GetPrevNonBlank(lnum)
         \ && synIDattr(synID(lnum, match(line,'#')+1,1),"name") =~ s:sh_comment
+        \ && (line !~# '\\\@<!\%(\\\\\)*`'
+        \ || s:HideCommentStr(line, lnum) =~# '^\s*$')
     let lnum = s:prev_lnum
     let line = getline(lnum)
   endwhile
