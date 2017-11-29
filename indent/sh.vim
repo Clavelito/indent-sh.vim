@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Mon, 27 Nov 2017 11:15:25 +0900
-" Version:          4.52
+" Last Change:      Thu, 30 Nov 2017 07:47:21 +0900
+" Version:          4.53
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -356,7 +356,7 @@ function s:GetLessIndentLineIndent(lnum, ind)
     if ind > last_ind
       let ind = last_ind
     endif
-    if indent(lnum) < ind
+    if !ind || !indent(lnum) || indent(lnum) < ind
       break
     endif
   endwhile
@@ -480,6 +480,8 @@ function s:GetNextContinueLine(line, lnum)
     let line .= getline(lnum)
   endwhile
   unlet! s:next_lnum
+  let line = s:HideAnyItemLine(line)
+  let line = substitute(line, '\(;\|&\||\|)\|\s\)#.*$', '\1', "")
 
   return line
 endfunction
