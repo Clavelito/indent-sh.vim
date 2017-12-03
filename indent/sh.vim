@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Thu, 30 Nov 2017 07:47:21 +0900
-" Version:          4.53
+" Last Change:      Sun, 03 Dec 2017 17:42:00 +0900
+" Version:          4.54
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -208,7 +208,7 @@ function s:PrevLineIndent0(pline, line, lnum, ind)
   else
     let ind = s:PrevLineIndent2(line, ind)
   endif
-  if s:IsExprLineTail(line) && !s:IsContinuLinePrev(line)
+  if line =~# '^\s*\%(fi\|done\|esac\)\>' && !s:IsContinuLinePrev(line)
     let ind = s:GetLessIndentLineIndent(a:lnum, ind)
   endif
 
@@ -338,25 +338,30 @@ function s:GetLessIndentLineIndent(lnum, ind)
   endif
   let lnum = a:lnum
   let ind = a:ind
-  let last_ind = ind
-  let line = ""
   while s:GetPrevNonBlank(lnum)
     let last_ind = ind
     let [line, lnum] = s:SkipCommentLine(getline(s:prev_lnum), s:prev_lnum, 0)
     let [line, lnum, ind] = s:GetSkipItemLinesHeadAndTail(line, lnum, ind)
-    if indent(lnum) == ind
-          \ && s:IsExprLineTail(line) && !s:IsContinuLinePrev(line)
+    let cind = indent(lnum)
+    if cind == ind
+          \ && !s:IsContinuLinePrev(line)
+          \ && (s:IsExprLineTail(line)
+          \ || !s:IsFunctionLine(line) && !s:IsExprLineHead(line)
+          \ && line !~# '^\s*\%(do\|then\|elif\|else\)\>'
+          \ && s:PairBalance(line, "{", "}") == 0
+          \ && s:PairBalance(line, "(", ")") == 0)
       break
-    elseif indent(lnum) < ind
-          \ && s:IsExprLineTail(line) && s:IsContinuLinePrev(line)
-      let ind = indent(lnum)
+    elseif cind < ind
+          \ && s:IsContinuLinePrev(line) && s:IsExprLineTail(line)
+      let ind = cind
     elseif s:IsContinuLinePrev(line)
       let [line, lnum, ind] = s:GetContinueLineIndent(line, lnum, 1)
+      let cind = indent(lnum)
     endif
     if ind > last_ind
       let ind = last_ind
     endif
-    if !ind || !indent(lnum) || indent(lnum) < ind
+    if !ind || !cind || cind < ind
       break
     endif
   endwhile
@@ -896,8 +901,9 @@ function s:HideTailNoContinue(line)
 endfunction
 
 function s:IsExprLineHead(line)
-  return a:line =~# '^\s*\%(if\|while\|until\|for\|select\|case\)\>'
-        \ && a:line !~# '[;&]\s*\%(fi\|done\|esac\)\>'
+  return a:line =~# '^\s*if\>\%(.*[;&]\s*fi\>\)\@!'
+        \. '\|^\s*case\>\%(.*[;&]\s*esac\>\)\@!'
+        \. '\|^\s*\%(while\|until\|for\|select\)\>\%(.*[;&]\s*done\>\)\@!'
 endfunction
 
 function s:IsExprLineTail(line)
