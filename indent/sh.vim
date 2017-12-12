@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Sun, 10 Dec 2017 21:22:52 +0900
-" Version:          4.56
+" Last Change:      Tue, 12 Dec 2017 19:49:41 +0900
+" Version:          4.57
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -184,7 +184,6 @@ function s:PrevLineIndent(line, lnum, pline, pnum, ind)
   let ind = s:ParenBraceIndent(a:pline, line2, line, a:lnum, ind)
   let ind = s:CloseParenIndent(a:pline, line2, line, a:pnum, ind)
   let ind = s:CloseBraceIndnnt(a:pline, line2, line, a:lnum, a:pnum, ind)
-  let line = s:HideAnyItemLine3(line)
   let ind = s:PrevLineIndent0(a:pline, line, a:lnum, ind)
 
   return ind
@@ -559,34 +558,24 @@ endfunction
 function s:CaseLabelLineIndent(line, ind)
   let line = a:line
   let ind = a:ind
-  let head = ""
-  let sum = 1
-  let i = matchend(line, '\s*(\=')
-  let sphead = substitute(strpart(line, 0, i), '($', ' ', '')
-  let slist = split(line, '\zs')
-  let max = len(slist)
-  while sum && i < max
-    if slist[i] ==# '('
-      let sum += 1
-    elseif slist[i] ==# ')'
-      let sum -= 1
+  let sum = 0
+  while 1
+    let sum = matchend(line, ')', sum)
+    if sum < 0
+      break
     endif
-    let head .= slist[i]
-    let i += 1
+    let head = strpart(line, 0,  sum)
+    let balance = s:PairBalance(head, "(", ")")
+    if line =~# '^\s*(' && balance == 0 || balance == -1
+      let pt = '^\V'. head
+      let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), "")
+      break
+    endif
   endwhile
-  if sum == 0
-    let line = strpart(line, strlen(head) + strlen(sphead))
-    let llen = strdisplaywidth(head)
-    while llen
-      let line = " ". line
-      let llen -= 1
-    endwhile
-    let line = sphead. line
-    if line !~# '^\s*$' && line !~# ';[;&]\s*$'
-      let ind = strdisplaywidth(strpart(line, 0, matchend(line, '\s*')))
-    else
-      let ind = ind + shiftwidth()
-    endif
+  if line !~# '^\s*$' && line !~# ';[;&]\s*$'
+    let ind = strdisplaywidth(strpart(line, 0, matchend(line, '\s*')))
+  else
+    let ind = ind + shiftwidth()
   endif
   if line =~# ';[;&]\s*$'
     let ind = ind - shiftwidth()
@@ -629,7 +618,26 @@ function s:HideAnyItemLine(line)
       if empty(item)
         break
       endif
-      let val = max(sort(keys(item), 'n'))
+      let val = max(keys(item))
+      let pt = '^.\{'. (val). '}\zs'. item[val]
+      let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), '')
+    endwhile
+    let val = -2
+    while 1
+      let item = {}
+      if line =~# '\${[^{}]\{-}\ze\s\+'
+            \ && val == matchend(line, '\${[^{}]\{-}\ze\s\+')
+        let item[match(line, '\${[^{}]\{-}\ze\s\+')] = '\${[^{}]\{-}\ze\s\+'
+      endif
+      if line =~# '\s*{[^{}]\{-}\%([;&]\s*\%(fi\|done\|esac\)\=\s*\)\@<!}'
+        let item[match(line,
+              \ '\s*{[^{}]\{-}\%([;&]\s*\%(fi\|done\|esac\)\=\s*\)\@<!}')]
+              \ = '\s*{[^{}]\{-}\%([;&]\s*\%(fi\|done\|esac\)\=\s*\)\@<!}'
+      endif
+      if empty(item)
+        break
+      endif
+      let val = max(keys(item))
       let pt = '^.\{'. (val). '}\zs'. item[val]
       let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), '')
     endwhile
@@ -650,19 +658,6 @@ function s:HideAnyItemLine2(line)
   if line =~# '\<case\>' && line =~# ')'
     let line = substitute(line, '\<case\>\zs.\{-})', '|', 'g')
     let line = substitute(line, ';[;&]\%(\s*\<esac\>\)\@!.\{-})', '|', "g")
-  endif
-
-  return line
-endfunction
-
-function s:HideAnyItemLine3(line)
-  let line = a:line
-  if line =~# '\%(^\|[^$]\){.*}'
-    let len = 0
-    while len != strlen(line)
-      let len = strlen(line)
-      let line = substitute(line, '\$\@<!{[^{}]*}', '', 'g')
-    endwhile
   endif
 
   return line
