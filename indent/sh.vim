@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Tue, 12 Dec 2017 19:49:41 +0900
-" Version:          4.57
+" Last Change:      Sat, 16 Dec 2017 14:09:51 +0900
+" Version:          4.58
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -114,10 +114,10 @@ function GetShIndent()
   let line = s:HideAnyItemLine(line)
   let [pline, pnum] = s:SkipCommentLine(line, lnum, 1)
   let pline = s:BlankOrContinue(pline, pnum, lnum - 1)
-  let [pline, pnum] = s:PreMorePrevLine(pline, pnum)
+  let [rpline, pline, pnum] = s:PreMorePrevLine(pline, pnum)
   let [pline, ind] = s:MorePrevLineIndent(pline, pnum, line, lnum, ind)
   let [line, ind] = s:InsideCaseLabelIndent(pline, line, ind)
-  let ind = s:PrevLineIndent(line, lnum, pline, pnum, ind)
+  let ind = s:PrevLineIndent(line, lnum, pline, pnum, rpline, ind)
   let ind = s:CurrentLineIndent(line, lnum, cline, pline, ind)
 
   return ind
@@ -131,7 +131,7 @@ function s:MorePrevLineIndent(pline, pnum, line, lnum, ind)
     let pline = s:GetPrevContinueLine(a:pline, a:pnum)
   endif
   if !s:IsInSideCase(pline) && s:IsTailNoContinue(line)
-    let line = s:HideTailNoContinue(line)
+    let line = s:HideTailBackSlash(line)
   endif
   if (!s:IsTailBackSlash(a:pline) && s:IsTailBackSlash(line)
         \ && !g:sh_indent_and_or_or
@@ -177,20 +177,20 @@ function s:InsideCaseLabelIndent(pline, line, ind)
   return [line, ind]
 endfunction
 
-function s:PrevLineIndent(line, lnum, pline, pnum, ind)
+function s:PrevLineIndent(line, lnum, pline, pnum, rpline, ind)
   let line2 = getline(a:lnum)
   let [line, ind] = s:GetFunctionIndent(a:line, a:ind)
   let line = s:HideAnyItemLine2(line)
   let ind = s:ParenBraceIndent(a:pline, line2, line, a:lnum, ind)
   let ind = s:CloseParenIndent(a:pline, line2, line, a:pnum, ind)
-  let ind = s:CloseBraceIndnnt(a:pline, line2, line, a:lnum, a:pnum, ind)
-  let ind = s:PrevLineIndent0(a:pline, line, a:lnum, ind)
+  let ind = s:CloseBraceIndent(a:pline, line2, line, a:lnum, a:pnum, ind)
+  let ind = s:PrevLineIndent0(a:pline, line, a:lnum, a:rpline, ind)
 
   return ind
 endfunction
 
-function s:PrevLineIndent0(pline, line, lnum, ind)
-  if s:MatchSynId(a:lnum, 1, s:sh_echo)
+function s:PrevLineIndent0(pline, line, lnum, rpline, ind)
+  if !s:IsHeadAndBarOr(a:line) && s:IsTailBackSlash2(a:rpline)
     return a:ind
   endif
   let line = a:line
@@ -244,7 +244,9 @@ function s:PrevLineIndent3(line, ind, sum)
 endfunction
 
 function s:CurrentLineIndent(line, lnum, cline, pline, ind)
-  if s:MatchSynId(v:lnum, 1, s:sh_echo)
+  if a:cline =~# '^\s*\%(;;\|;&\|;;&\)\s*\%(#.*\)\=$'
+    return s:CaseBreakIndent(a:ind) + shiftwidth()
+  elseif s:IsTailBackSlash2(a:line)
     return a:ind
   endif
   let ind = a:ind
@@ -253,9 +255,7 @@ function s:CurrentLineIndent(line, lnum, cline, pline, ind)
   elseif a:cline =~# '^\s*\%(then\|do\)\>[-=+.]\@!' && s:IsInSideCase(a:pline)
     let ind = s:CaseLabelNextIndent(ind) + shiftwidth()
   endif
-  if a:cline =~# '^\s*\%(;;\|;&\|;;&\)\s*\%(#.*\)\=$'
-    let ind = s:CaseBreakIndent(ind) + shiftwidth()
-  elseif a:cline =~# '^\s*\%(then\|do\|else\|elif\|fi\|done\)\>[-=+.]\@!'
+  if a:cline =~# '^\s*\%(then\|do\|else\|elif\|fi\|done\)\>[-=+.]\@!'
         \ || a:cline =~# '^\s*[})]' && !s:IsInSideCase(a:line)
     let ind = ind - shiftwidth()
   elseif a:cline =~# '^\s*[{(]\s*\%(#.*\)\=$'
@@ -289,7 +289,7 @@ function s:CloseParenIndent(pline, line, nline, pnum, ind)
   return ind
 endfunction
 
-function s:CloseBraceIndnnt(pline, line, nline, lnum, pnum, ind)
+function s:CloseBraceIndent(pline, line, nline, lnum, pnum, ind)
   let ind = a:ind
   let pt1 = '\%(^\|\%(\${[^}]\+\)\@<![;&]\)'
         \. '\%(\C\s*\%(done\|fi\|esac\)\)\=\s*}\|^\s\+}'
@@ -347,12 +347,14 @@ function s:GetLessIndentLineIndent(lnum, ind)
           \ && !s:IsContinuLinePrev(line)
           \ && (s:IsExprLineTail(line)
           \ || !s:IsFunctionLine(line) && !s:IsExprLineHead(line)
+          \ && !s:IsHeadAndBarOr(line)
           \ && line !~# '^\s*\%(do\|then\|elif\|else\)\>'
           \ && s:ParenBraceBalanced(line, 1))
       break
-    elseif cind < ind
-          \ && s:IsContinuLinePrev(line) && s:IsExprLineTail(line)
+    elseif cind < ind && s:IsContinuLinePrev(line) && s:IsExprLineTail(line)
       let ind = cind
+    elseif cind < ind && !s:IsContinuLinePrev(line) && s:IsHeadAndBarOr(line)
+      continue
     elseif s:IsContinuLinePrev(line)
       let [line, lnum, ind] = s:GetContinueLineIndent(line, lnum, 1)
       let cind = indent(lnum)
@@ -420,10 +422,11 @@ endfunction
 
 function s:GetContinueLineIndent(pline, pnum, ...)
   let [pline, pnum, line, lnum] = s:GetPrevContinueLine(a:pline, a:pnum, 1)
+  let [rpline, pline, pnum] = s:PreMorePrevLine(pline, pnum)
   let ind = s:BackQuoteIndent(lnum, indent(lnum))
   let line = s:HideAnyItemLine(line)
   let [line, ind] = s:InsideCaseLabelIndent(pline, line, ind)
-  let ind = s:PrevLineIndent(line, lnum, pline, pnum, ind)
+  let ind = s:PrevLineIndent(line, lnum, pline, pnum, rpline, ind)
 
   if a:0
     return [line, lnum, ind]
@@ -439,7 +442,7 @@ function s:GetPrevContinueLine(line, lnum, ...)
   let last_lnum = 0
   while s:IsContinuLinePrev(line) && s:GetPrevNonBlank(lnum)
     let blank = lnum - 1 == s:prev_lnum ? 0 : 1
-    let last_line = substitute(line, '\\$', '', ''). last_line
+    let last_line = s:HideTailBackSlash(line). last_line
     let last_lnum = lnum
     let lnum = s:prev_lnum
     let line = getline(lnum)
@@ -459,7 +462,7 @@ function s:GetPrevContinueLine(line, lnum, ...)
   endif
 
   if a:0 && lnum == 1 && s:IsContinuLinePrev(line)
-    return ["", 0, substitute(line, '\\$', '', ''). last_line, lnum]
+    return ["", 0, s:HideTailBackSlash(line). last_line, lnum]
   elseif a:0
     return [line, lnum, last_line, last_lnum]
   else
@@ -476,14 +479,14 @@ function s:PreMorePrevLine(line, lnum)
     let line = s:GetNextContinueLine(getline(lnum), lnum)
   endif
 
-  return [line, lnum]
+  return [a:line, line, lnum]
 endfunction
 
 function s:GetNextContinueLine(line, lnum)
   let line = a:line
   let lnum = a:lnum
   while line =~# '\\\@<!\\\%(\\\\\)*$' && s:GetNextNonBlank(lnum) == lnum + 1
-    let line = substitute(line, '\\$', "", "")
+    let line = s:HideTailBackSlash(line)
     let lnum = s:next_lnum
     let line .= getline(lnum)
   endwhile
@@ -897,14 +900,21 @@ endfunction
 
 function s:BlankOrContinue(line, lnum, lnum2)
   if s:IsTailBackSlash(a:line) && a:lnum != a:lnum2
-    return substitute(a:line, '\\$', '', '')
+    return s:HideTailBackSlash(a:line)
   else
     return a:line
   endif
 endfunction
 
-function s:HideTailNoContinue(line)
-  return substitute(a:line, '\%(;\|&\||\)\s*\\$', '', '')
+function s:HideTailBackSlash(line)
+  return substitute(a:line, '\\$', "", "")
+endfunction
+
+function s:IsTailBackSlash2(item)
+  let line = type(a:item) == type("")
+        \ ? a:item : s:HideCommentStr(getline(a:item), a:item)
+  return s:IsTailBackSlash(line)
+        \ && !s:IsTailBar(line) && !s:IsTailNoContinue(line)
 endfunction
 
 function s:IsExprLineHead(line)
@@ -924,6 +934,10 @@ function s:IsFunctionLine(line)
         \ || a:line =~# '^\s*function\s\+\S\+\s*$'
 endfunction
 
+function s:IsHeadAndBarOr(line)
+  return a:line =~# '^\s*\%(&&\|||\=\)'
+endfunction
+
 function s:IsTailAndOr(line)
   return a:line =~# '\%(&&\|||\)\s*\\\=$'
 endfunction
@@ -941,6 +955,7 @@ function s:IsTailNoContinue(line)
   return a:line =~# '\%(\\\@<!\\\%(\\\\\)*\|;\)\@<!;\s*\\$'
         \ || a:line =~# '\%(\\\@<!\\\%(\\\\\)*\|&\)\@<!&\s*\\$'
         \ || a:line =~# '\%(\\\@<!\\\%(\\\\\)*\||\)\@<!|\s*\\$'
+        \ || a:line =~# '\%(\\\@<!\\\%(\\\\\)*\)\@<!\%(;;\|;&\|;;&\)\s*\\$'
 endfunction
 
 function s:IsContinuLineFore(line)
