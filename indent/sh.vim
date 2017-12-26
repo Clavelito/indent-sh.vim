@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Sat, 16 Dec 2017 14:09:51 +0900
-" Version:          4.58
+" Last Change:      Tue, 26 Dec 2017 13:57:22 +0900
+" Version:          4.59
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -117,7 +117,7 @@ function GetShIndent()
   let [rpline, pline, pnum] = s:PreMorePrevLine(pline, pnum)
   let [pline, ind] = s:MorePrevLineIndent(pline, pnum, line, lnum, ind)
   let [line, ind] = s:InsideCaseLabelIndent(pline, line, ind)
-  let ind = s:PrevLineIndent(line, lnum, pline, pnum, rpline, ind)
+  let ind = s:PrevLineIndent(line, lnum, pline, rpline, ind)
   let ind = s:CurrentLineIndent(line, lnum, cline, pline, ind)
 
   return ind
@@ -128,6 +128,7 @@ function s:MorePrevLineIndent(pline, pnum, line, lnum, ind)
   let pline = a:pline
   let line = a:line
   if s:IsTailBackSlash(a:pline)
+        \ && (s:IsTailBar(a:pline) || a:line =~# '^\s*|[^|]')
     let pline = s:GetPrevContinueLine(a:pline, a:pnum)
   endif
   if !s:IsInSideCase(pline) && s:IsTailNoContinue(line)
@@ -140,7 +141,7 @@ function s:MorePrevLineIndent(pline, pnum, line, lnum, ind)
         \ || !s:IsContinuLinePrev(a:pline) && s:IsTailBar(a:line)
         \ && g:sh_indent_tail_bar)
         \ && (!s:IsInSideCase(pline) || a:line =~# '^\s*esac\>')
-        \ && s:GetLessIndentLineIndent(a:lnum, ind) == ind
+        \ && s:GetLessIndentLineIndent(a:lnum, ind, 0) == ind
     let ind = ind + shiftwidth()
   elseif (s:IsTailAndOr(a:pline) && !s:IsContinuLineFore(line)
         \ && !s:IsTailBar(a:line) && !s:IsFunctionLine(line)
@@ -157,7 +158,7 @@ function s:MorePrevLineIndent(pline, pnum, line, lnum, ind)
         \ || s:IsTailBackSlash(a:pline) && !s:IsTailBackSlash(line)
         \ && !s:IsTailBar(a:line) && !g:sh_indent_and_or_or)
         \ && !s:IsTailNoContinue(a:pline) && !s:IsTailBar(a:pline)
-    let ind = s:GetLessIndentLineIndent(a:lnum, ind)
+    let ind = s:GetLessIndentLineIndent(a:lnum, ind, 1)
   endif
 
   return [pline, ind]
@@ -177,13 +178,13 @@ function s:InsideCaseLabelIndent(pline, line, ind)
   return [line, ind]
 endfunction
 
-function s:PrevLineIndent(line, lnum, pline, pnum, rpline, ind)
+function s:PrevLineIndent(line, lnum, pline, rpline, ind)
   let line2 = getline(a:lnum)
   let [line, ind] = s:GetFunctionIndent(a:line, a:ind)
   let line = s:HideAnyItemLine2(line)
   let ind = s:ParenBraceIndent(a:pline, line2, line, a:lnum, ind)
-  let ind = s:CloseParenIndent(a:pline, line2, line, a:pnum, ind)
-  let ind = s:CloseBraceIndent(a:pline, line2, line, a:lnum, a:pnum, ind)
+  let ind = s:CloseParenIndent(a:pline, line2, line, a:lnum, a:rpline, ind)
+  let ind = s:CloseBraceIndent(a:pline, line2, line, a:lnum, a:rpline, ind)
   let ind = s:PrevLineIndent0(a:pline, line, a:lnum, a:rpline, ind)
 
   return ind
@@ -207,8 +208,9 @@ function s:PrevLineIndent0(pline, line, lnum, rpline, ind)
   else
     let ind = s:PrevLineIndent2(line, ind)
   endif
-  if line =~# '^\s*\%(fi\|done\|esac\)\>' && !s:IsContinuLinePrev(line)
-    let ind = s:GetLessIndentLineIndent(a:lnum, ind)
+  if line =~# '^\s*\%(fi\|done\|esac\)\>'
+        \ && !s:IsContinuLinePrev(line) && !s:IsContinuLinePrev(a:rpline)
+    let ind = s:GetLessIndentLineIndent(a:lnum, ind, 0)
   endif
 
   return ind
@@ -273,7 +275,7 @@ function s:CurrentLineIndent(line, lnum, cline, pline, ind)
   return ind
 endfunction
 
-function s:CloseParenIndent(pline, line, nline, pnum, ind)
+function s:CloseParenIndent(pline, line, nline, lnum, rpline, ind)
   let ind = a:ind
   if a:nline =~# ')' && a:nline !~# '^\s*case\>'
         \ && a:nline !~# ';[;&]\s*$' && !s:IsInSideCase(a:pline)
@@ -281,15 +283,15 @@ function s:CloseParenIndent(pline, line, nline, pnum, ind)
       let ind = ind + shiftwidth()
     endif
     let ind = ind - shiftwidth() * (len(split(a:nline, ')', 1)) - 1)
-    if !s:IsContinuLinePrev(a:nline)
-      let ind = s:GetLessIndentLineIndent(a:pnum, ind)
+    if !s:IsContinuLinePrev(a:nline) && !s:IsContinuLinePrev(a:rpline)
+      let ind = s:GetLessIndentLineIndent(a:lnum, ind, 0)
     endif
   endif
 
   return ind
 endfunction
 
-function s:CloseBraceIndent(pline, line, nline, lnum, pnum, ind)
+function s:CloseBraceIndent(pline, line, nline, lnum, rpline, ind)
   let ind = a:ind
   let pt1 = '\%(^\|\%(\${[^}]\+\)\@<![;&]\)'
         \. '\%(\C\s*\%(done\|fi\|esac\)\)\=\s*}\|^\s\+}'
@@ -299,8 +301,8 @@ function s:CloseBraceIndent(pline, line, nline, lnum, pnum, ind)
       let ind = ind + shiftwidth()
     endif
     let ind = ind - shiftwidth() * (len(split(a:nline, pt1, 1)) - 1)
-    if !s:IsContinuLinePrev(a:nline)
-      let ind = s:GetLessIndentLineIndent(a:pnum, ind)
+    if !s:IsContinuLinePrev(a:nline) && !s:IsContinuLinePrev(a:rpline)
+      let ind = s:GetLessIndentLineIndent(a:lnum, ind, 0)
     endif
   endif
 
@@ -332,7 +334,7 @@ function s:ParenBraceIndent(pline, line2, line, lnum, ind)
   return ind
 endfunction
 
-function s:GetLessIndentLineIndent(lnum, ind)
+function s:GetLessIndentLineIndent(lnum, ind, more)
   if !a:ind
     return 0
   endif
@@ -340,7 +342,11 @@ function s:GetLessIndentLineIndent(lnum, ind)
   let ind = a:ind
   while s:GetPrevNonBlank(lnum)
     let last_ind = ind
-    let [line, lnum] = s:SkipCommentLine(getline(s:prev_lnum), s:prev_lnum, 0)
+    let lnum = s:prev_lnum
+    if !a:more && indent(lnum) >= ind
+      continue
+    endif
+    let [line, lnum] = s:SkipCommentLine(getline(lnum), lnum, 0)
     let [line, lnum, ind] = s:GetSkipItemLinesHeadAndTail(line, lnum, ind)
     let cind = indent(lnum)
     if cind == ind
@@ -357,7 +363,6 @@ function s:GetLessIndentLineIndent(lnum, ind)
       continue
     elseif s:IsContinuLinePrev(line)
       let [line, lnum, ind] = s:GetContinueLineIndent(line, lnum, 1)
-      let cind = indent(lnum)
     endif
     if ind > last_ind
       let ind = last_ind
@@ -426,7 +431,7 @@ function s:GetContinueLineIndent(pline, pnum, ...)
   let ind = s:BackQuoteIndent(lnum, indent(lnum))
   let line = s:HideAnyItemLine(line)
   let [line, ind] = s:InsideCaseLabelIndent(pline, line, ind)
-  let ind = s:PrevLineIndent(line, lnum, pline, pnum, rpline, ind)
+  let ind = s:PrevLineIndent(line, lnum, pline, rpline, ind)
 
   if a:0
     return [line, lnum, ind]
@@ -440,7 +445,9 @@ function s:GetPrevContinueLine(line, lnum, ...)
   let lnum = a:lnum
   let last_line = ""
   let last_lnum = 0
-  while s:IsContinuLinePrev(line) && s:GetPrevNonBlank(lnum)
+  let s:IsContinueLine = a:0 ? function("s:IsContinuLinePrev")
+        \ : function("s:IsTailBackSlash")
+  while s:IsContinueLine(line) && s:GetPrevNonBlank(lnum)
     let blank = lnum - 1 == s:prev_lnum ? 0 : 1
     let last_line = s:HideTailBackSlash(line). last_line
     let last_lnum = lnum
