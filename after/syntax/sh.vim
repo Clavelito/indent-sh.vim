@@ -1,5 +1,5 @@
 " after/syntax/sh.vim
-" Last Change:   Sat, 16 Dec 2017 09:06:21 +0900
+" Last Change:   Mon, 29 Jan 2018 15:17:18 +0900
 
 if exists("g:sh_indent_hide_after_syntax")
   finish
@@ -23,13 +23,19 @@ if exists("b:is_bash")
 endif
 syn match   shSpecial		"\\\@1<!\zs\\\%(\\\\\)*[\\"'`$()#]"
 
+if exists("b:is_bash")
+ syn clear  shDerefOff
+ syn region shDerefOff		contained	start=':[-+?=]\@!' end='\ze:' end='\ze}' contains=shDeref,shDerefSimple,shArithmetic nextgroup=shDerefLen,shDeref,shDerefSimple
+ syn match  shDerefLen		contained	":[^}]\+"				 contains=shDeref,shDerefSimple,shArithmetic
+endif
 if exists("b:is_bash") || exists("b:is_kornshell") && exists("g:is_posix") && getline(1) !~# '\<ksh$'
  syn clear  shDerefPattern
- syn match  shDerefPattern	contained	"[^}]\+"	contains=shDeref,shDerefSimple,shDerefPattern,shDerefString,shCommandSub,shDerefEscape nextgroup=shDerefPattern
+ syn match  shDerefPattern	contained	"[^}]\+"	contains=shDeref,shDerefSimple,shDerefString,shCommandSub,shDerefEscape nextgroup=shDerefPattern
 elseif exists("b:is_posix")
+ syn clear  shDerefPattern
  syn match  shDerefOp		contained	"##\="		nextgroup=@shDerefPatternList
  syn match  shDerefOp		contained	"%%\="		nextgroup=@shDerefPatternList
- syn match  shDerefPattern	contained	"[^}]\+"	contains=shDeref,shDerefSimple,shDerefPattern,shDerefString,shCommandSub,shDerefEscape nextgroup=shDerefPattern
+ syn match  shDerefPattern	contained	"[^}]\+"	contains=shDeref,shDerefSimple,shDerefString,shCommandSub,shDerefEscape nextgroup=shDerefPattern
 endif
 
 if exists("b:is_kornshell") || exists("b:is_bash") || exists("b:is_posix")
