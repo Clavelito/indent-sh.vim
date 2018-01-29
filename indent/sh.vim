@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Tue, 26 Dec 2017 13:57:22 +0900
-" Version:          4.59
+" Last Change:      Mon, 29 Jan 2018 13:58:35 +0900
+" Version:          4.60
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -182,7 +182,7 @@ function s:PrevLineIndent(line, lnum, pline, rpline, ind)
   let line2 = getline(a:lnum)
   let [line, ind] = s:GetFunctionIndent(a:line, a:ind)
   let line = s:HideAnyItemLine2(line)
-  let ind = s:ParenBraceIndent(a:pline, line2, line, a:lnum, ind)
+  let ind = s:ParenBraceIndent(line, a:lnum, ind)
   let ind = s:CloseParenIndent(a:pline, line2, line, a:lnum, a:rpline, ind)
   let ind = s:CloseBraceIndent(a:pline, line2, line, a:lnum, a:rpline, ind)
   let ind = s:PrevLineIndent0(a:pline, line, a:lnum, a:rpline, ind)
@@ -196,9 +196,10 @@ function s:PrevLineIndent0(pline, line, lnum, rpline, ind)
   endif
   let line = a:line
   let ind = a:ind
-  if line =~# '[|`(;&]\|\%(^\|;\|&\||\)\s*\%(if\s\+\|elif\s\+\)\={'
+  let pt1 = '\C\%(\%(if\|elif\|while\|until\)\s\+\)\=\%([!]\s\+\)\=\zs{\ze'
+  if line =~# '[|`(;&]\|\%(^\|;\|&\||\)\s*'. pt1
     let sum = 0
-    for str in split(line, '[|`(;&]\|^\s*\%(if\s\+\|elif\s\+\)\=\zs{\ze')
+    for str in split(line, '[|`(;&]\|^\s*'. pt1)
       let ind = s:PrevLineIndent3(str, ind, sum)
       let sum += 1
     endfor
@@ -309,26 +310,16 @@ function s:CloseBraceIndent(pline, line, nline, lnum, rpline, ind)
   return ind
 endfunction
 
-function s:ParenBraceIndent(pline, line2, line, lnum, ind)
+function s:ParenBraceIndent(line, lnum, ind)
   let ind = a:ind
-  if a:line =~# '(\|\%(;\|&\||\)\s*{'
-    let sum = 0
-    for str in split(a:line, '(\|\%(;\|&\||\)\s*{', 1)
-      if sum && str =~# '^\s*\%(if\s\+\|elif\s\+\)\={'
-        let sum += len(split(str, '^\s*\C\%(if\s\+\|elif\s\+\)\={', 1)) - 1
-      endif
-      let sum += 1
-    endfor
-    let ind = ind + shiftwidth() * (sum - 1)
+  let pt1 = '\%(^\|;\|&\||\)\s*'
+        \. '\C\%(\%(if\|elif\|while\|until\)\s\+\)\=\%([!]\s\+\)\={'
+  if a:line =~# '('
+    let ind = ind + shiftwidth() * (len(split(a:line, '(', 1)) - 1)
   endif
-  if a:line2 =~# '^\s*\%(if\s\+\|elif\s\+\)\={' && !s:IsInSideCase(a:pline)
-        \ && !s:MatchSynId(a:lnum, 1, s:sh_echo)
-    let ind = ind + shiftwidth()
-          \ * (len(split(a:line2, '^\s*\C\%(if\s\+\|elif\s\+\)\={', 1)) - 1)
-  elseif a:line =~# '^\s*\%(if\s\+\|elif\s\+\)\={'
-        \ && s:IsInSideCase(a:pline) && a:line !~# ';[;&]\s*$'
-    let ind = ind + shiftwidth()
-          \ * (len(split(a:line, '^\s*\C\%(if\s\+\|elif\s\+\)\={', 1)) - 1)
+  if a:line =~# pt1
+        \ && a:line !~# ';[;&]\s*$' && !s:MatchSynId(a:lnum, 1, s:sh_echo)
+    let ind = ind + shiftwidth() * (len(split(a:line, pt1, 1)) - 1)
   endif
 
   return ind
