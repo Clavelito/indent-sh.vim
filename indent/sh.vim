@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Mon, 29 Jan 2018 13:58:35 +0900
-" Version:          4.60
+" Last Change:      Sun, 04 Feb 2018 18:06:57 +0900
+" Version:          4.61
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -182,10 +182,10 @@ function s:PrevLineIndent(line, lnum, pline, rpline, ind)
   let line2 = getline(a:lnum)
   let [line, ind] = s:GetFunctionIndent(a:line, a:ind)
   let line = s:HideAnyItemLine2(line)
+  let ind = s:PrevLineIndent0(a:pline, line, a:lnum, a:rpline, ind)
   let ind = s:ParenBraceIndent(line, a:lnum, ind)
   let ind = s:CloseParenIndent(a:pline, line2, line, a:lnum, a:rpline, ind)
   let ind = s:CloseBraceIndent(a:pline, line2, line, a:lnum, a:rpline, ind)
-  let ind = s:PrevLineIndent0(a:pline, line, a:lnum, a:rpline, ind)
 
   return ind
 endfunction
@@ -194,23 +194,27 @@ function s:PrevLineIndent0(pline, line, lnum, rpline, ind)
   if !s:IsHeadAndBarOr(a:line) && s:IsTailBackSlash2(a:rpline)
     return a:ind
   endif
-  let line = a:line
   let ind = a:ind
   let pt1 = '\C\%(\%(if\|elif\|while\|until\)\s\+\)\=\%([!]\s\+\)\=\zs{\ze'
-  if line =~# '[|`(;&]\|\%(^\|;\|&\||\)\s*'. pt1
+  if a:line =~# '[|`(;&]\|\%(\%(^\|;\|&\||\)\s*\|\%(do\|then\|else\)\s\+\)'. pt1
+    let s:case_count = 0
     let sum = 0
-    for str in split(line, '[|`(;&]\|^\s*'. pt1)
+    for str in split(a:line, '[|`(;&]\|^\s*'. pt1)
       let ind = s:PrevLineIndent3(str, ind, sum)
       let sum += 1
     endfor
     if str =~# '^\s*\%(then\|do\)\>' && s:IsInSideCase(a:pline) && ind == a:ind
       let ind = s:CaseLabelNextIndent(ind) + shiftwidth()
     endif
+    if a:line =~# ';[;&]\s*$' && !s:case_count
+      let ind = a:ind
+    endif
+    unlet s:case_count
   else
-    let ind = s:PrevLineIndent2(line, ind)
+    let ind = s:PrevLineIndent2(a:line, ind)
   endif
-  if line =~# '^\s*\%(fi\|done\|esac\)\>'
-        \ && !s:IsContinuLinePrev(line) && !s:IsContinuLinePrev(a:rpline)
+  if a:line =~# '^\s*\%(fi\|done\|esac\)\>'
+        \ && !s:IsContinuLinePrev(a:line) && !s:IsContinuLinePrev(a:rpline)
     let ind = s:GetLessIndentLineIndent(a:lnum, ind, 0)
   endif
 
@@ -219,10 +223,15 @@ endfunction
 
 function s:PrevLineIndent2(line, ind)
   let ind = a:ind
-  if a:line =~# '^\s*\%(if\|then\|else\|elif\)\>'
-        \ || a:line =~# '^\s*\%(do\|while\|until\|for\|select\)\>'
+  let line = a:line
+  if line =~# '^\s*\%(then\|do\|else\)\>\s\+\S'
     let ind = ind + shiftwidth()
-  elseif a:line =~# '^\s*case\>'
+    let line = substitute(line, '^\s*\S\+\s\+', '', '')
+  endif
+  if line =~# '^\s*\%(if\|then\|else\|elif\)\>'
+        \ || line =~# '^\s*\%(do\|while\|until\|for\|select\)\>'
+    let ind = ind + shiftwidth()
+  elseif line =~# '^\s*case\>'
     let ind = ind + s:IndentCaseLabels()
   endif
 
@@ -231,23 +240,34 @@ endfunction
 
 function s:PrevLineIndent3(line, ind, sum)
   let ind = a:ind
-  if a:line =~# '^\s*\%(then\|do\|else\|elif\)\>' && !a:sum
+  let line = a:line
+  if line =~# '^\s*\%(then\|do\|else\)\>\s*$\|^\s*elif\>' && !a:sum
     let ind = ind + shiftwidth()
-  elseif a:line =~# '^\s*\%(if\|while\|until\|for\|select\)\>'
+  elseif line =~# '^\s*\%(then\|do\|else\)\>\s\+\S' && !a:sum
     let ind = ind + shiftwidth()
-  elseif a:line =~# '^\s*\%(done\|fi\)\>' && a:sum
+    let line = substitute(line, '^\s*\S\+\s\+', '', '')
+  elseif line =~# '^\s*\%(then\|do\|else\)\>\s\+\S' && a:sum
+    let line = substitute(line, '^\s*\S\+\s\+', '', '')
+  endif
+  if line =~# '^\s*\%(if\|while\|until\|for\|select\)\>'
+    let ind = ind + shiftwidth()
+  elseif line =~# '^\s*\%(done\|fi\)\>' && a:sum
     let ind = ind - shiftwidth()
-  elseif a:line =~# '^\s*case\>'
+  elseif line =~# '^\s*case\>'
+    let s:case_count += 1
     let ind = ind + s:IndentCaseLabels()
-  elseif a:line =~# '^\s*esac\>' && a:sum
+  elseif line =~# '^\s*esac\>' && a:sum && s:case_count
+    let s:case_count -= 1
     let ind = ind - s:IndentCaseLabels()
+  elseif line =~# '^\s*esac\>' && a:sum
+    let ind = s:CaseBreakIndent(ind) - s:IndentCaseLabels()
   endif
 
   return ind
 endfunction
 
 function s:CurrentLineIndent(line, lnum, cline, pline, ind)
-  if a:cline =~# '^\s*\%(;;\|;&\|;;&\)\s*\%(#.*\)\=$'
+  if a:cline =~# '^\s*;[;&]'
     return s:CaseBreakIndent(a:ind) + shiftwidth()
   elseif s:IsTailBackSlash2(a:line)
     return a:ind
@@ -312,7 +332,7 @@ endfunction
 
 function s:ParenBraceIndent(line, lnum, ind)
   let ind = a:ind
-  let pt1 = '\%(^\|;\|&\||\)\s*'
+  let pt1 = '\%(\%(^\|;\|&\||\)\s*\|\%(do\|then\|else\)\s\+\)'
         \. '\C\%(\%(if\|elif\|while\|until\)\s\+\)\=\%([!]\s\+\)\={'
   if a:line =~# '('
     let ind = ind + shiftwidth() * (len(split(a:line, '(', 1)) - 1)
@@ -534,17 +554,23 @@ function s:CaseBreakIndent(ind, ...)
       if line =~# '^\s*case\>'
         let ind = nind + s:IndentCaseLabels()
         break
+      elseif line =~# '^\s*\%(do\|then\|else\)\s\+case\>'
+        let ind = nind + s:IndentCaseLabels() + shiftwidth()
+        break
       elseif line =~# '^\s*#'
         continue
       elseif line =~# ')'
         let [pline, pnum] = s:SkipCommentLine(line, lnum, 1)
-        let pline = s:GetPrevContinueLine(pline, pnum)
+        if s:IsTailBackSlash(pline)
+              \ && (s:IsTailBar(pline) || line =~# '^\s*|[^|]')
+          let pline = s:GetPrevContinueLine(pline, pnum)
+        endif
         if s:IsInSideCase(pline)
           let line = s:HideAnyItemLine(line)
           let [line, sum] = s:CaseLabelLineIndent(line, sum)
+          let ind = nind
         endif
       endif
-      let ind = nind
     endif
   endwhile
   unlet! s:prev_lnum
@@ -967,7 +993,8 @@ function s:IsContinuLinePrev(line)
 endfunction
 
 function s:IsInSideCase(line)
-  return a:line =~# '\%(^\|[;&|`(){}]\)\s*case\>\%(.*;[;&]\s*\<esac\>\)\@!'
+  return a:line =~# '\%(^\%(\s*\%(do\|then\|else\)\s\+\)\=\|[;&|`(){}]\)'
+        \. '\s*case\>\%(.*;[;&]\s*\<esac\>\)\@!'
         \ || a:line =~# ';[;&]\s*$'
 endfunction
 
