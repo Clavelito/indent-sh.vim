@@ -1,5 +1,5 @@
 " after/syntax/sh.vim
-" Last Change:   Mon, 29 Jan 2018 15:17:18 +0900
+" Last Change:   Thu, 08 Feb 2018 21:01:25 +0900
 
 if exists("g:sh_indent_hide_after_syntax")
   finish
@@ -12,16 +12,20 @@ if exists("b:is_kornshell") || exists("b:is_bash")
  syn cluster shCaseList		add=shDblParen,shParen
 endif
 
-syn region  shNoQuote		contained	start="\S" skip="\\\@1<!\zs\\\%(\\\\\)*." end='\ze\s'	contains=@shNoQuoteList containedin=shDblBrace
-syn region  shTestDoubleQuote	contained	start='"'  skip='\\\@1<!\zs\\\%(\\\\\)*"' end='"'	contains=shDeref,shDerefSimple,shDerefSpecial
+syn region  shNoQuote		contained	start="\S" skip="\\\@<!\%(\\\\\)*\\." end='\ze\s'	contains=@shNoQuoteList containedin=shDblBrace
+syn region  shTestDoubleQuote	contained	start='"'  skip='\\\@<!\%(\\\\\)*\\"' end='"'		contains=shDeref,shDerefSimple,shDerefSpecial
 syn region  shDoubleQuote	matchgroup=shQuote start=+"+ end=+"+					contains=@shDblQuoteList,shStringSpecial,@Spell
 
-syn match   shStringSpecial	"\\\@1<!\zs\\\%(\\\\\)*[\\"'`$()#]"	contained
-syn clear shSpecial
+syn clear   shStringSpecial
+syn match   shStringSpecial	"[^[:print:] \t]"			contained
+syn match   shStringSpecial	"\\\@<!\%(\\\\\)*\\[\\"`$()#]"		contained
+syn clear   shSpecial
 if exists("b:is_bash")
- syn match   shSpecial		"\\\@1<!\zs\\\%(\\\\\)*\%(\o\o\o\|x\x\x\|c[^"]\|[abefnrtv]\)"	contained
+ syn match   shSpecial		"\\\@<!\%(\\\\\)*\\\%(\o\o\o\|x\x\x\|c[^"]\|[abefnrtv]\)"	contained
 endif
-syn match   shSpecial		"\\\@1<!\zs\\\%(\\\\\)*[\\"'`$()#]"
+syn match   shSpecial		"\\\@<!\%(\\\\\)*\\[\\"`$()#]"
+syn match   shEscSnglQuote	"\\\@<!\%(\\\\\)*\\'"			containedin=ALLBUT,shCaseSingleQuote,shTestSingleQuote,shSingleQuote,shStringSpecial,shSpecial,shDerefString,shComment,shQuickComment
+hi def link shEscSnglQuote	shSpecial
 
 if exists("b:is_bash")
  syn clear  shDerefOff
