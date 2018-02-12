@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Sun, 04 Feb 2018 18:06:57 +0900
-" Version:          4.61
+" Last Change:      Mon, 12 Feb 2018 17:44:30 +0900
+" Version:          4.62
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -625,49 +625,69 @@ function s:GetItemLenSpaces(line, item)
   return line
 endfunction
 
+function s:HideQuotePairs(line, pos, bq)
+  let line = a:line
+  while 1
+    let item = {}
+    if strpart(line, a:pos) =~# '".\{-}"'
+      let item[match(line, '"', a:pos)] = '".\{-}"'
+    endif
+    if strpart(line, a:pos) =~# "'[^']*'"
+      let item[match(line, "'", a:pos)] = "'[^']*'"
+    endif
+    if strpart(line, a:pos) =~# '`.\{-}`' && a:bq
+      let item[match(line, '`', a:pos)] = '`.\{-}`'
+    endif
+    if empty(item)
+      break
+    endif
+    let val = min(keys(item))
+    let pt = '^.\{'. (val). '}\zs'. item[val]
+    let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), '')
+  endwhile
+
+  return line
+endfunction
+
+function s:HideBracePairs(line)
+  let line = a:line
+  let val = -2
+  while 1
+    let item = {}
+    if line =~# '\${[^{}]\{-}\ze\s\+'
+          \ && val == matchend(line, '\${[^{}]\{-}\ze\s\+')
+      let item[match(line, '\${[^{}]\{-}\ze\s\+')] = '\${[^{}]\{-}\ze\s\+'
+    endif
+    if line =~# '\s*{[^{}]\{-}\%([;&]\s*\%(fi\|done\|esac\)\=\s*\)\@<!}'
+      let item[match(line,
+            \ '\s*{[^{}]\{-}\%([;&]\s*\%(fi\|done\|esac\)\=\s*\)\@<!}')]
+            \ = '\s*{[^{}]\{-}\%([;&]\s*\%(fi\|done\|esac\)\=\s*\)\@<!}'
+    endif
+    if empty(item)
+      break
+    endif
+    let val = max(keys(item))
+    let pt = '^.\{'. (val). '}\zs'. item[val]
+    let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), '')
+  endwhile
+
+  return line
+endfunction
+
 function s:HideAnyItemLine(line)
   let line = a:line
   if line =~# '[;&|`(){}]'
     while line =~# '\\.'
       let line = substitute(line, '\\.', s:GetItemLenSpaces(line, '\\.'), '')
     endwhile
-    while 1
-      let item = {}
-      if line =~# '".\{-}"'
-        let item[match(line, '"')] = '".\{-}"'
-      endif
-      if line =~# '\%o47.\{-}\%o47'
-        let item[match(line, "'")] = '\%o47.\{-}\%o47'
-      endif
-      if line =~# '`.\{-}`'
-        let item[match(line, '`')] = '`.\{-}`'
-      endif
-      if empty(item)
-        break
-      endif
-      let val = max(keys(item))
-      let pt = '^.\{'. (val). '}\zs'. item[val]
-      let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), '')
-    endwhile
-    let val = -2
-    while 1
-      let item = {}
-      if line =~# '\${[^{}]\{-}\ze\s\+'
-            \ && val == matchend(line, '\${[^{}]\{-}\ze\s\+')
-        let item[match(line, '\${[^{}]\{-}\ze\s\+')] = '\${[^{}]\{-}\ze\s\+'
-      endif
-      if line =~# '\s*{[^{}]\{-}\%([;&]\s*\%(fi\|done\|esac\)\=\s*\)\@<!}'
-        let item[match(line,
-              \ '\s*{[^{}]\{-}\%([;&]\s*\%(fi\|done\|esac\)\=\s*\)\@<!}')]
-              \ = '\s*{[^{}]\{-}\%([;&]\s*\%(fi\|done\|esac\)\=\s*\)\@<!}'
-      endif
-      if empty(item)
-        break
-      endif
-      let val = max(keys(item))
-      let pt = '^.\{'. (val). '}\zs'. item[val]
-      let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), '')
-    endwhile
+    if line =~# '\$(.*)'
+      let line = s:HideQuotePairs(line, matchend(line, '\$('), 1)
+    endif
+    if line =~# '`.\{-}`'
+      let line = s:HideQuotePairs(line, matchend(line, '`'), 0)
+    endif
+    let line = s:HideQuotePairs(line, 0, 1)
+    let line = s:HideBracePairs(line)
   endif
 
   return line
