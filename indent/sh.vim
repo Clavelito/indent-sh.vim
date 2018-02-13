@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Mon, 12 Feb 2018 17:44:30 +0900
-" Version:          4.62
+" Last Change:      Tue, 13 Feb 2018 20:58:07 +0900
+" Version:          4.63
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -651,23 +651,10 @@ endfunction
 
 function s:HideBracePairs(line)
   let line = a:line
-  let val = -2
-  while 1
-    let item = {}
-    if line =~# '\${[^{}]\{-}\ze\s\+'
-          \ && val == matchend(line, '\${[^{}]\{-}\ze\s\+')
-      let item[match(line, '\${[^{}]\{-}\ze\s\+')] = '\${[^{}]\{-}\ze\s\+'
-    endif
-    if line =~# '\s*{[^{}]\{-}\%([;&]\s*\%(fi\|done\|esac\)\=\s*\)\@<!}'
-      let item[match(line,
-            \ '\s*{[^{}]\{-}\%([;&]\s*\%(fi\|done\|esac\)\=\s*\)\@<!}')]
-            \ = '\s*{[^{}]\{-}\%([;&]\s*\%(fi\|done\|esac\)\=\s*\)\@<!}'
-    endif
-    if empty(item)
-      break
-    endif
-    let val = max(keys(item))
-    let pt = '^.\{'. (val). '}\zs'. item[val]
+  let pt1 = '\%(&\s*\||\s*\|\$\|\${[^{}]\+\)\@<!{[^{}]\{-}}'
+        \. '\|\${[^{}]\+\%([;&]\s*\%(fi\|done\|esac\)\=\s*\)\@<!}'
+  while line =~# pt1
+    let pt = '^.\{'. (match(line, pt1)). '}\zs'. pt1
     let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), '')
   endwhile
 
