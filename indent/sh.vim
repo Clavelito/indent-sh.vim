@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Tue, 13 Feb 2018 20:58:07 +0900
-" Version:          4.63
+" Last Change:      Wed, 14 Feb 2018 17:02:54 +0900
+" Version:          4.64
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -59,6 +59,7 @@ let s:sh_quote = 'shQuote'
 let s:sh_here_doc = 'HereDoc'
 let s:sh_here_doc_eof = 'HereDoc\d\d\|shRedir\d\d'
 let s:sh_echo = 'Echo'
+let s:sh_deref = 'DerefPattern'
 
 if !exists("g:sh_indent_case_labels")
   let g:sh_indent_case_labels = 1
@@ -757,12 +758,27 @@ function s:HideCommentStr(line, lnum)
   let line = a:line
   if a:lnum && line =~# '\\\@<!\%(\\\\\)*\zs#'
         \ && line =~# '\%(\${\%(\h\w*\|\d\+\)#\=\|\${\=\)\@<!#'
+        \ || a:lnum && line =~# '\${'
     let max = strlen(a:line)
     let sum = 0
+    let pos = 0
     let line = ""
+    let pt = ""
     while sum < max
-      if synIDattr(synID(a:lnum, sum + 1, 1), "name") !~? s:sh_comment
+      if synIDattr(synID(a:lnum, sum + 1, 1), "name")
+            \ !~? s:sh_comment. '\|'. s:sh_deref
+        if pos
+          let pt = '^.\{'. (pos). '}\zs'. pt
+          let line .= s:GetItemLenSpaces(a:line, pt)
+          let pos = 0
+          let pt = ""
+        endif
         let line .= strpart(a:line, sum, 1)
+      else
+        if !pos
+          let pos = sum
+        endif
+        let pt .= strpart(a:line, sum, 1)
       endif
       let sum += 1
     endwhile
