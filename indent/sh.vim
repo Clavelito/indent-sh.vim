@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Sat, 17 Feb 2018 17:44:15 +0900
-" Version:          4.65
+" Last Change:      Sat, 17 Feb 2018 21:41:51 +0900
+" Version:          4.66
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -642,7 +642,7 @@ function s:HideQuotePairs(line, pos, bq)
       break
     endif
     let val = min(keys(item))
-    let pt = '^.\{'. (val). '}\zs'. item[val]
+    let pt = '^.\{'. (strchars(strpart(line, 0, val))). '}\zs'. item[val]
     let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), '')
   endwhile
 
@@ -653,7 +653,7 @@ function s:HideBracePairs(line)
   let line = a:line
   let pt1 = '\%(&\s*\||\s*\)\@<!{[^{}]\{-}}'
   while line =~# pt1
-    let pt = '^.\{'. (match(line, pt1)). '}\zs'. pt1
+    let pt = '^.\{'. (strchars(strpart(line, 0, match(line, pt1)))). '}\zs'. pt1
     let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), '')
   endwhile
 
@@ -754,7 +754,8 @@ endfunction
 
 function s:HideCommentStrAndVariable(line, lnum)
   let line = a:line
-  if a:lnum && line =~# '\s#\|#.*`'
+  if a:lnum && line =~# '\\\@<!\%(\\\\\)*\zs#'
+        \ && line =~# '\%(\${\%(\h\w*\|\d\+\)#\=\|\${\=\)\@<!#'
         \ || a:lnum && line =~# '\${\|}' && line =~# '[;&|`()]'
     let max = strlen(a:line)
     let sum = 0
@@ -769,7 +770,7 @@ function s:HideCommentStrAndVariable(line, lnum)
           let pt .= strpart(a:line, sum, 1)
         else
           if pos > -1
-            let pt = '^.\{'. (pos). '}\zs'. pt
+            let pt = '^.\{'. (strchars(strpart(a:line, 0, pos))). '}\zs'. pt
             let line .= s:GetItemLenSpaces(a:line, pt)
             let pos = -1
             let pt = ""
@@ -798,7 +799,7 @@ function s:HideCommentStrAndVariable(line, lnum)
       let sum += 1
     endwhile
     if proc || strlen(pt)
-      let pt = '^.\{'. (pos). '}\zs'. pt
+      let pt = '^.\{'. (strchars(strpart(a:line, 0, pos))). '}\zs'. pt
       let line .= s:GetItemLenSpaces(a:line, pt)
     endif
   endif
