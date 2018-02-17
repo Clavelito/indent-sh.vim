@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Wed, 14 Feb 2018 17:02:54 +0900
-" Version:          4.64
+" Last Change:      Sat, 17 Feb 2018 17:44:15 +0900
+" Version:          4.65
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -59,7 +59,7 @@ let s:sh_quote = 'shQuote'
 let s:sh_here_doc = 'HereDoc'
 let s:sh_here_doc_eof = 'HereDoc\d\d\|shRedir\d\d'
 let s:sh_echo = 'Echo'
-let s:sh_deref = 'DerefPattern'
+let s:sh_deref = 'PreProc'
 
 if !exists("g:sh_indent_case_labels")
   let g:sh_indent_case_labels = 1
@@ -315,8 +315,7 @@ endfunction
 
 function s:CloseBraceIndent(pline, line, nline, lnum, rpline, ind)
   let ind = a:ind
-  let pt1 = '\%(^\|\%(\${[^}]\+\)\@<![;&]\)'
-        \. '\%(\C\s*\%(done\|fi\|esac\)\)\=\s*}\|^\s\+}'
+  let pt1 = '[;&]\C\s*\%(done\|fi\|esac\)\=\s*}\|^\s\+}'
   if a:nline =~# pt1 && a:nline !~# ';[;&]\s*$'
         \ && !s:MatchSynId(a:lnum, 1, s:sh_echo)
     if a:line =~# '^\s*}' && !s:IsInSideCase(a:pline)
@@ -427,12 +426,12 @@ function s:SkipCommentLine(line, lnum, prev)
   while lnum && line =~# '^\s*#' && s:GetPrevNonBlank(lnum)
         \ && synIDattr(synID(lnum, match(line,'#')+1,1),"name") =~? s:sh_comment
         \ && (line !~# '\\\@<!\%(\\\\\)*\zs`'
-        \ || s:HideCommentStr(line, lnum) =~# '^\s*$')
+        \ || s:HideCommentStrAndVariable(line, lnum) =~# '^\s*$')
     let lnum = s:prev_lnum
     let line = getline(lnum)
   endwhile
   unlet! s:prev_lnum
-  let line = s:HideCommentStr(line, lnum)
+  let line = s:HideCommentStrAndVariable(line, lnum)
 
   return [line, lnum]
 endfunction
@@ -652,8 +651,7 @@ endfunction
 
 function s:HideBracePairs(line)
   let line = a:line
-  let pt1 = '\%(&\s*\||\s*\|\$\|\${[^{}]\+\)\@<!{[^{}]\{-}}'
-        \. '\|\${[^{}]\+\%([;&]\s*\%(fi\|done\|esac\)\=\s*\)\@<!}'
+  let pt1 = '\%(&\s*\||\s*\)\@<!{[^{}]\{-}}'
   while line =~# pt1
     let pt = '^.\{'. (match(line, pt1)). '}\zs'. pt1
     let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), '')
@@ -754,34 +752,55 @@ function s:SkipItemsLines(lnum, item)
   return lnum
 endfunction
 
-function s:HideCommentStr(line, lnum)
+function s:HideCommentStrAndVariable(line, lnum)
   let line = a:line
-  if a:lnum && line =~# '\\\@<!\%(\\\\\)*\zs#'
-        \ && line =~# '\%(\${\%(\h\w*\|\d\+\)#\=\|\${\=\)\@<!#'
-        \ || a:lnum && line =~# '\${'
+  if a:lnum && line =~# '\s#\|#.*`'
+        \ || a:lnum && line =~# '\${\|}' && line =~# '[;&|`()]'
     let max = strlen(a:line)
     let sum = 0
-    let pos = 0
+    let pos = -1
+    let proc = 0
     let line = ""
     let pt = ""
     while sum < max
-      if synIDattr(synID(a:lnum, sum + 1, 1), "name")
-            \ !~? s:sh_comment. '\|'. s:sh_deref
-        if pos
-          let pt = '^.\{'. (pos). '}\zs'. pt
-          let line .= s:GetItemLenSpaces(a:line, pt)
-          let pos = 0
-          let pt = ""
+      let name = synIDattr(synID(a:lnum, sum + 1, 1), "name")
+      if name !~? s:sh_comment. '\|'. s:sh_deref
+        if proc
+          let pt .= strpart(a:line, sum, 1)
+        else
+          if pos > -1
+            let pt = '^.\{'. (pos). '}\zs'. pt
+            let line .= s:GetItemLenSpaces(a:line, pt)
+            let pos = -1
+            let pt = ""
+          endif
+          let line .= strpart(a:line, sum, 1)
         endif
-        let line .= strpart(a:line, sum, 1)
       else
-        if !pos
+        let str = strpart(a:line, sum, 1)
+        if name =~? s:sh_deref && str ==# '}' && !proc
+          let pt = '^'. line. str
+          let line = s:GetItemLenSpaces(a:line, pt)
+          let pos = -1
+          let pt = ""
+          let sum += 1
+          continue
+        elseif name =~? s:sh_deref && str ==# '}'
+          let proc -= 1
+        elseif name =~? s:sh_deref && str ==# '$'
+          let proc += 1
+        endif
+        if pos < 0
           let pos = sum
         endif
-        let pt .= strpart(a:line, sum, 1)
+        let pt .= str
       endif
       let sum += 1
     endwhile
+    if proc || strlen(pt)
+      let pt = '^.\{'. (pos). '}\zs'. pt
+      let line .= s:GetItemLenSpaces(a:line, pt)
+    endif
   endif
 
   return line
@@ -959,7 +978,7 @@ endfunction
 
 function s:IsTailBackSlash2(item)
   let line = type(a:item) == type("")
-        \ ? a:item : s:HideCommentStr(getline(a:item), a:item)
+        \ ? a:item : s:HideCommentStrAndVariable(getline(a:item), a:item)
   return s:IsTailBackSlash(line)
         \ && !s:IsTailBar(line) && !s:IsTailNoContinue(line)
 endfunction
