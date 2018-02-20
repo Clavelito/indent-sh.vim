@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Sat, 17 Feb 2018 21:41:51 +0900
-" Version:          4.66
+" Last Change:      Tue, 20 Feb 2018 18:40:27 +0900
+" Version:          4.67
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -60,6 +60,7 @@ let s:sh_here_doc = 'HereDoc'
 let s:sh_here_doc_eof = 'HereDoc\d\d\|shRedir\d\d'
 let s:sh_echo = 'Echo'
 let s:sh_deref = 'PreProc'
+let s:sh_deref_str = 'DerefPattern\|DerefString'
 
 if !exists("g:sh_indent_case_labels")
   let g:sh_indent_case_labels = 1
@@ -102,7 +103,7 @@ function GetShIndent()
     elseif cname =~? s:test_d_or_s_quote
           \ && s:EndOfTestQuotes(line, lnum, s:test_d_or_s_quote)
       break
-    elseif cname =~? s:d_or_s_quote
+    elseif cname =~? s:d_or_s_quote. '\|'. s:sh_deref_str
       return indent(v:lnum)
     endif
   endfor
@@ -503,7 +504,7 @@ endfunction
 function s:GetNextContinueLine(line, lnum)
   let line = a:line
   let lnum = a:lnum
-  while line =~# '\\\@<!\\\%(\\\\\)*$' && s:GetNextNonBlank(lnum) == lnum + 1
+  while line =~# '\\\@<!\%(\\\\\)*\\$' && s:GetNextNonBlank(lnum) == lnum + 1
     let line = s:HideTailBackSlash(line)
     let lnum = s:next_lnum
     let line .= getline(lnum)
@@ -752,11 +753,12 @@ function s:SkipItemsLines(lnum, item)
   return lnum
 endfunction
 
-function s:HideCommentStrAndVariable(line, lnum)
+function s:HideCommentStrAndVariable(line, lnum, ...)
   let line = a:line
   if a:lnum && line =~# '\\\@<!\%(\\\\\)*\zs#'
         \ && line =~# '\%(\${\%(\h\w*\|\d\+\)#\=\|\${\=\)\@<!#'
         \ || a:lnum && line =~# '\${\|}' && line =~# '[;&|`()]'
+        \ || a:lnum && a:0 && a:1
     let max = strlen(a:line)
     let sum = 0
     let pos = -1
@@ -780,7 +782,7 @@ function s:HideCommentStrAndVariable(line, lnum)
       else
         let str = strpart(a:line, sum, 1)
         if name =~? s:sh_deref && str ==# '}' && !proc
-          let pt = '^'. line. str
+          let pt = '^\V'. line. str
           let line = s:GetItemLenSpaces(a:line, pt)
           let pos = -1
           let pt = ""
@@ -924,6 +926,22 @@ function s:GetBackQuoteHeadAndTail(line, lnum, ind)
   return [line. tline, lnum, ind]
 endfunction
 
+function s:GetDerefHeadAndTail(line, lnum)
+  let lnum = s:SkipItemsLines(a:lnum, s:sh_deref. '\|'. s:sh_deref_str)
+  if lnum != a:lnum
+    if a:line =~# '[;&|`()]'
+      let line = s:HideCommentStrAndVariable(getline(lnum), lnum, 1). a:line
+    else
+      let line = s:HideCommentStrAndVariable(getline(lnum), lnum, 1)
+            \. s:HideCommentStrAndVariable(a:line, a:lnum, 1)
+    endif
+  else
+    let line = a:line
+  endif
+
+  return [line, lnum]
+endfunction
+
 function s:GetSkipItemLinesHeadAndTail(line, lnum, ind)
   let line = a:line
   let lnum = a:lnum
@@ -940,6 +958,9 @@ function s:GetSkipItemLinesHeadAndTail(line, lnum, ind)
       break
     elseif lname =~? s:back_quote && ind < 0
       let [line, lnum, ind] = s:GetBackQuoteHeadAndTail(line, lnum, ind)
+      break
+    elseif lname =~? s:sh_deref_str. '\|'. s:sh_deref
+      let [line, lnum] = s:GetDerefHeadAndTail(line, lnum)
       break
     endif
   endfor
@@ -1014,24 +1035,24 @@ function s:IsTailBar(line)
 endfunction
 
 function s:IsTailBackSlash(line)
-  return a:line =~# '\\\@<!\\\%(\\\\\)*$'
+  return a:line =~# '\\\@<!\%(\\\\\)*\\$'
         \ && a:line =~# '\%(&&\s*\|||\s*\)\@<!\\$'
 endfunction
 
 function s:IsTailNoContinue(line)
-  return a:line =~# '\%(\\\@<!\\\%(\\\\\)*\|;\)\@<!;\s*\\$'
-        \ || a:line =~# '\%(\\\@<!\\\%(\\\\\)*\|&\)\@<!&\s*\\$'
-        \ || a:line =~# '\%(\\\@<!\\\%(\\\\\)*\||\)\@<!|\s*\\$'
-        \ || a:line =~# '\%(\\\@<!\\\%(\\\\\)*\)\@<!\%(;;\|;&\|;;&\)\s*\\$'
+  return a:line =~# '\%(\\\@<!\%(\\\\\)*\\\|;\)\@<!;\s*\\$'
+        \ || a:line =~# '\%(\\\@<!\%(\\\\\)*\\\|&\)\@<!&\s*\\$'
+        \ || a:line =~# '\%(\\\@<!\%(\\\\\)*\\\||\)\@<!|\s*\\$'
+        \ || a:line =~# '\%(\\\@<!\%(\\\\\)*\\\)\@<!\%(;;\|;&\|;;&\)\s*\\$'
 endfunction
 
 function s:IsContinuLineFore(line)
-  return a:line =~# '\\\@<!\\\%(\\\\\)*$'
+  return a:line =~# '\\\@<!\%(\\\\\)*\\$'
         \ || a:line =~# '\%(&&\|||\)\s*\\\=$'
 endfunction
 
 function s:IsContinuLinePrev(line)
-  return a:line =~# '\\\@<!\\\%(\\\\\)*$'
+  return a:line =~# '\\\@<!\%(\\\\\)*\\$'
         \ || a:line =~# '\%(&&\|||\=\)\s*\\\=$'
 endfunction
 
