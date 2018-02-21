@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Tue, 20 Feb 2018 18:40:27 +0900
-" Version:          4.67
+" Last Change:      Wed, 21 Feb 2018 21:29:47 +0900
+" Version:          4.68
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -60,7 +60,7 @@ let s:sh_here_doc = 'HereDoc'
 let s:sh_here_doc_eof = 'HereDoc\d\d\|shRedir\d\d'
 let s:sh_echo = 'Echo'
 let s:sh_deref = 'PreProc'
-let s:sh_deref_str = 'DerefPattern\|DerefString'
+let s:sh_deref_str = 'Deref'
 
 if !exists("g:sh_indent_case_labels")
   let g:sh_indent_case_labels = 1
@@ -103,7 +103,7 @@ function GetShIndent()
     elseif cname =~? s:test_d_or_s_quote
           \ && s:EndOfTestQuotes(line, lnum, s:test_d_or_s_quote)
       break
-    elseif cname =~? s:d_or_s_quote. '\|'. s:sh_deref_str
+    elseif cname =~? s:d_or_s_quote. '\|'. s:sh_deref_str. '$'
       return indent(v:lnum)
     endif
   endfor
@@ -667,8 +667,8 @@ function s:HideAnyItemLine(line)
     while line =~# '\\.'
       let line = substitute(line, '\\.', s:GetItemLenSpaces(line, '\\.'), '')
     endwhile
-    if line =~# '\$(.*)'
-      let line = s:HideQuotePairs(line, matchend(line, '\$('), 1)
+    if line =~# '\$((\@!.*)'
+      let line = s:HideQuotePairs(line, matchend(line, '\$((\@!'), 1)
     endif
     if line =~# '`.\{-}`'
       let line = s:HideQuotePairs(line, matchend(line, '`'), 0)
@@ -772,7 +772,7 @@ function s:HideCommentStrAndVariable(line, lnum, ...)
           let pt .= strpart(a:line, sum, 1)
         else
           if pos > -1
-            let pt = '^.\{'. (strchars(strpart(a:line, 0, pos))). '}\zs'. pt
+            let pt = '^.\{'. (strchars(strpart(a:line, 0, pos))). '}\zs\V'. pt
             let line .= s:GetItemLenSpaces(a:line, pt)
             let pos = -1
             let pt = ""
@@ -782,8 +782,8 @@ function s:HideCommentStrAndVariable(line, lnum, ...)
       else
         let str = strpart(a:line, sum, 1)
         if name =~? s:sh_deref && str ==# '}' && !proc
-          let pt = '^\V'. line. str
-          let line = s:GetItemLenSpaces(a:line, pt)
+          let line .= str
+          let line = s:GetItemLenSpaces(line, '^\V'. line)
           let pos = -1
           let pt = ""
           let sum += 1
@@ -801,7 +801,7 @@ function s:HideCommentStrAndVariable(line, lnum, ...)
       let sum += 1
     endwhile
     if proc || strlen(pt)
-      let pt = '^.\{'. (strchars(strpart(a:line, 0, pos))). '}\zs'. pt
+      let pt = '^.\{'. (strchars(strpart(a:line, 0, pos))). '}\zs\V'. pt
       let line .= s:GetItemLenSpaces(a:line, pt)
     endif
   endif
@@ -946,6 +946,7 @@ function s:GetSkipItemLinesHeadAndTail(line, lnum, ind)
   let line = a:line
   let lnum = a:lnum
   let ind = a:ind
+  let sum = 0
   for lid in synstack(lnum, 1)
     let lname = synIDattr(lid, 'name')
     if lname =~? s:sh_here_doc_eof
@@ -959,9 +960,12 @@ function s:GetSkipItemLinesHeadAndTail(line, lnum, ind)
     elseif lname =~? s:back_quote && ind < 0
       let [line, lnum, ind] = s:GetBackQuoteHeadAndTail(line, lnum, ind)
       break
-    elseif lname =~? s:sh_deref_str. '\|'. s:sh_deref
+    elseif lname =~? s:sh_deref_str && sum
+          \ || lname =~? s:sh_deref && strpart(getline(lnum), 0, 1) ==# '}'
       let [line, lnum] = s:GetDerefHeadAndTail(line, lnum)
       break
+    elseif lname =~? s:sh_deref_str
+      let sum += 1
     endif
   endfor
 
