@@ -1,5 +1,5 @@
 " after/syntax/sh.vim
-" Last Change:   Thu, 22 Feb 2018 16:07:16 +0900
+" Last Change:   Thu, 22 Feb 2018 20:30:14 +0900
 
 if exists("g:sh_indent_hide_after_syntax")
   finish
@@ -36,7 +36,7 @@ if exists("b:is_bash")
  syn clear  shDerefPattern
  syn match  shDerefPattern	contained	"\_[^}]\+"	contains=shDeref,shDerefSimple,shDerefString,shCommandSub,shDerefEscape
  syn match  shDerefOp		contained	":\=[-+=?]"	nextgroup=@shDerefPatternList	skipempty
- syn match  shDerefPPS		contained	'//\='		nextgroup=shDerefPPSleft	skipempty
+ syn match  shDerefPPS		contained	'/[/#%]\='	nextgroup=shDerefPPSleft	skipempty
  syn region shDerefPPSleft	contained	start='.'	matchgroup=shDerefOp end='/' end='\ze}' contains=@shCommandSubList nextgroup=shDerefPPSright skipempty
 elseif exists("b:is_posix")
  syn match  shDerefOp		contained	"##\="		nextgroup=@shDerefPatternList
