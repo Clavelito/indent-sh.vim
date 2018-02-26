@@ -1,12 +1,14 @@
 " after/syntax/sh.vim
-" Last Change:   Thu, 22 Feb 2018 20:30:14 +0900
+" Last Change:   Tue, 27 Feb 2018 01:11:36 +0900
 
 if exists("g:sh_indent_hide_after_syntax")
   finish
 endif
 
 syn cluster shNoQuoteList	contains=shDerefSimple,shDeref,shDoubleQuote,shSingleQuote,shExDoubleQuote,shExSingleQuote,shSpecial,shStringSpecial,shCommandSub
-syn cluster shEscSnglQuoteList	contains=ALLBUT,shCaseSingleQuote,shTestSingleQuote,shSingleQuote,shStringSpecial,shSpecial,shDerefString,shComment,shQuickComment
+syn cluster shEscSnglQuoteIn	contains=ALLBUT,shCaseSingleQuote,shTestSingleQuote,shSingleQuote,shStringSpecial,shSpecial,shDerefString,shComment,shQuickComment
+syn cluster shBraceExpIn	contains=ALLBUT,shDeref.*,.*Quote,.*Comment
+syn cluster shBraceExpList	contains=shEscape,shComma,shTwinDot,shNumber
 syn cluster shEchoList		remove=shExpr
 syn cluster shTestList		remove=shExpr
 if exists("b:is_kornshell") || exists("b:is_bash")
@@ -26,15 +28,19 @@ if exists("b:is_bash")
  syn match   shSpecial		"\\\@<!\%(\\\\\)*\\\%(\o\o\o\|x\x\x\|c[^"]\|[abefnrtv]\)"	contained
 endif
 syn match   shSpecial		"\\\@<!\%(\\\\\)*\\[\\"`$()#]"
-syn match   shEscSnglQuote	"\\\@<!\%(\\\\\)*\\'"			containedin=@shEscSnglQuoteList
+syn match   shEscSnglQuote	"\\\@<!\%(\\\\\)*\\'"			containedin=@shEscSnglQuoteIn
 hi def link shEscSnglQuote	shSpecial
+syn region  shBraceExpansion	matchgroup=Delimiter start="{\ze\%(\%([^{}]\|\\.\)\{-},\|[^{}]\+[.][.]\)" end="}" contains=@shBraceExpList containedin=@shBraceExpIn oneline
+syn match   shTwinDot		"[.][.]"				contained	containedin=shCurlyIn
+hi def link shTwinDot		shComma
+hi def link shComma		shOperator
 
 if exists("b:is_bash")
  syn clear  shDerefOff
  syn region shDerefOff		contained	start=':[-+?=]\@!' end='\ze:' end='\ze}' contains=shDeref,shDerefSimple,shArithmetic nextgroup=shDerefLen,shDeref,shDerefSimple
  syn match  shDerefLen		contained	":[^}]\+"				 contains=shDeref,shDerefSimple,shArithmetic
  syn clear  shDerefPattern
- syn match  shDerefPattern	contained	"\_[^}]\+"	contains=shDeref,shDerefSimple,shDerefString,shCommandSub,shDerefEscape
+ syn match  shDerefPattern	contained	"\_[^}]\+"	contains=shDeref,shDerefSimple,shDerefString,shCommandSub,shDerefEscape nextgroup=shDerefPattern
  syn match  shDerefOp		contained	":\=[-+=?]"	nextgroup=@shDerefPatternList	skipempty
  syn match  shDerefPPS		contained	'/[/#%]\='	nextgroup=shDerefPPSleft	skipempty
  syn region shDerefPPSleft	contained	start='.'	matchgroup=shDerefOp end='/' end='\ze}' contains=@shCommandSubList nextgroup=shDerefPPSright skipempty
@@ -42,10 +48,10 @@ elseif exists("b:is_posix")
  syn match  shDerefOp		contained	"##\="		nextgroup=@shDerefPatternList
  syn match  shDerefOp		contained	"%%\="		nextgroup=@shDerefPatternList
  syn clear  shDerefPattern
- syn match  shDerefPattern	contained	"[^}]\+"	contains=shDeref,shDerefSimple,shDerefString,shCommandSub,shDerefEscape
+ syn match  shDerefPattern	contained	"[^}]\+"	contains=shDeref,shDerefSimple,shDerefString,shCommandSub,shDerefEscape nextgroup=shDerefPattern
 elseif exists("b:is_kornshell") && exists("g:is_posix") && getline(1) !~# '\<ksh$'
  syn clear  shDerefPattern
- syn match  shDerefPattern	contained	"[^}]\+"	contains=shDeref,shDerefSimple,shDerefString,shCommandSub,shDerefEscape
+ syn match  shDerefPattern	contained	"[^}]\+"	contains=shDeref,shDerefSimple,shDerefString,shCommandSub,shDerefEscape nextgroup=shDerefPattern
 endif
 
 if exists("b:is_kornshell") || exists("b:is_bash") || exists("b:is_posix")
