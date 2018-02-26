@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Wed, 21 Feb 2018 21:29:47 +0900
-" Version:          4.68
+" Last Change:      Mon, 26 Feb 2018 15:49:33 +0900
+" Version:          4.69
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -52,9 +52,11 @@ let s:cpo_save = &cpo
 set cpo&vim
 
 let s:back_quote = 'CommandSub'
+let s:command_sub = 'CmdSubRegion'
 let s:sh_comment = 'Comment\|Todo'
 let s:test_d_or_s_quote = 'TestDoubleQuote\|TestSingleQuote'
 let s:d_or_s_quote = 'DoubleQuote\|SingleQuote\|DblQuote\|SnglQuote'
+let s:double_quote = 'DoubleQuote'
 let s:sh_quote = 'shQuote'
 let s:sh_here_doc = 'HereDoc'
 let s:sh_here_doc_eof = 'HereDoc\d\d\|shRedir\d\d'
@@ -94,6 +96,7 @@ function GetShIndent()
     return 0
   endif
 
+  let sum = 0
   for cid in reverse(synstack(lnum, strlen(line)))
     let cname = synIDattr(cid, 'name')
     if cname =~? s:sh_here_doc. '$'
@@ -102,6 +105,10 @@ function GetShIndent()
       return ind
     elseif cname =~? s:test_d_or_s_quote
           \ && s:EndOfTestQuotes(line, lnum, s:test_d_or_s_quote)
+      break
+    elseif cname =~? s:back_quote
+      let sum += 1
+    elseif cname =~? s:double_quote && sum
       break
     elseif cname =~? s:d_or_s_quote. '\|'. s:sh_deref_str. '$'
       return indent(v:lnum)
@@ -113,7 +120,6 @@ function GetShIndent()
   let ind = s:BackQuoteIndent(lnum, 0)
   let [line, lnum, ind] = s:GetSkipItemLinesHeadAndTail(line, lnum, ind)
   let ind = indent(lnum) + ind
-  let line = s:HideAnyItemLine(line)
   let [pline, pnum] = s:SkipCommentLine(line, lnum, 1)
   let pline = s:BlankOrContinue(pline, pnum, lnum - 1)
   let [rpline, pline, pnum] = s:PreMorePrevLine(pline, pnum)
@@ -143,6 +149,7 @@ function s:MorePrevLineIndent(pline, pnum, line, lnum, ind)
         \ || !s:IsContinuLinePrev(a:pline) && s:IsTailBar(a:line)
         \ && g:sh_indent_tail_bar)
         \ && (!s:IsInSideCase(pline) || a:line =~# '^\s*esac\>')
+        \ && !s:IsInItItem(a:lnum, s:double_quote)
         \ && s:GetLessIndentLineIndent(a:lnum, ind, 0) == ind
     let ind = ind + shiftwidth()
   elseif (s:IsTailAndOr(a:pline) && !s:IsContinuLineFore(line)
@@ -367,7 +374,8 @@ function s:GetLessIndentLineIndent(lnum, ind, more)
           \ || !s:IsFunctionLine(line) && !s:IsExprLineHead(line)
           \ && !s:IsHeadAndBarOr(line)
           \ && line !~# '^\s*\%(do\|then\|elif\|else\)\>'
-          \ && s:ParenBraceBalanced(line, 1))
+          \ && !s:PairBalance(line, "{", "}")
+          \ && !s:PairBalance(line, "(", ")"))
       break
     elseif cind < ind && s:IsContinuLinePrev(line) && s:IsExprLineTail(line)
       let ind = cind
@@ -425,14 +433,18 @@ function s:SkipCommentLine(line, lnum, prev)
     let lnum = 0
   endif
   while lnum && line =~# '^\s*#' && s:GetPrevNonBlank(lnum)
-        \ && synIDattr(synID(lnum, match(line,'#')+1,1),"name") =~? s:sh_comment
+        \ && s:MatchSynId(lnum, match(line,'#') + 1, s:sh_comment)
         \ && (line !~# '\\\@<!\%(\\\\\)*\zs`'
-        \ || s:HideCommentStrAndVariable(line, lnum) =~# '^\s*$')
+        \ || s:HideCommentStr(line, lnum) =~# '^\s*$')
     let lnum = s:prev_lnum
     let line = getline(lnum)
   endwhile
   unlet! s:prev_lnum
-  let line = s:HideCommentStrAndVariable(line, lnum)
+  if a:prev
+    let line = s:HideCommentStr(line, lnum)
+  else
+    let line = s:HideAnyItemLine3(line, lnum)
+  endif
 
   return [line, lnum]
 endfunction
@@ -441,7 +453,6 @@ function s:GetContinueLineIndent(pline, pnum, ...)
   let [pline, pnum, line, lnum] = s:GetPrevContinueLine(a:pline, a:pnum, 1)
   let [rpline, pline, pnum] = s:PreMorePrevLine(pline, pnum)
   let ind = s:BackQuoteIndent(lnum, indent(lnum))
-  let line = s:HideAnyItemLine(line)
   let [line, ind] = s:InsideCaseLabelIndent(pline, line, ind)
   let ind = s:PrevLineIndent(line, lnum, pline, rpline, ind)
 
@@ -567,7 +578,7 @@ function s:CaseBreakIndent(ind, ...)
           let pline = s:GetPrevContinueLine(pline, pnum)
         endif
         if s:IsInSideCase(pline)
-          let line = s:HideAnyItemLine(line)
+          let line = s:HideAnyItemLine3(line, lnum)
           let [line, sum] = s:CaseLabelLineIndent(line, sum)
           let ind = nind
         endif
@@ -600,7 +611,7 @@ function s:CaseLabelLineIndent(line, ind)
       break
     endif
   endwhile
-  if line !~# '^\s*$' && line !~# ';[;&]\s*$'
+  if line !~# '^\s*$' && line !~# ';[;&]\s*$' && line !~# '^\s*#'
     let ind = strdisplaywidth(strpart(line, 0, matchend(line, '\s*')))
   else
     let ind = ind + shiftwidth()
@@ -697,6 +708,111 @@ function s:HideAnyItemLine2(line)
   return line
 endfunction
 
+function s:HideAnyItemLine3(line, lnum, ...)
+  let line = a:line
+  let item = {}
+  let pt = ""
+  let sum = 0
+  if line =~# '[;&|`(){}]' && line =~# '[$"#]\|\%o47\|\\.' || a:0 && a:1
+    for str in split(line, '\zs')
+      if empty(item) && str !~# '[$`"#}'. "']"
+        let sum += strlen(str)
+        continue
+      elseif empty(item) && str ==# '$'
+        let item = s:GetItemProperty(a:lnum, sum + 1)
+        if item.name !=? s:sh_deref
+          let item = {}
+        endif
+      elseif empty(item) && (str ==# "'" || str ==# '"')
+        let item = s:GetItemProperty(a:lnum, sum + 1)
+        if item.name !~? s:sh_quote
+          let item = {}
+        elseif item.name =~? s:sh_quote && item.under !~? s:d_or_s_quote
+          let line = s:HideHeadAndReachStr(line, str)
+          let item = {}
+        endif
+      elseif empty(item) && str ==# '#'
+        let item = s:GetItemProperty(a:lnum, sum + 1)
+        if item.name !~? s:sh_comment
+          let item = {}
+        endif
+      elseif empty(item) && str ==# '}'
+            \ && s:GetItemProperty(a:lnum, sum + 1).name ==? s:sh_deref
+        let line = s:HideHeadAndReachStr(line, str)
+      elseif !empty(item) && item.name =~? s:sh_comment
+            \ && !s:MatchSynId(a:lnum, sum + 1, s:sh_comment)
+        let [line, pt, item] = s:HideItemAndReachStr(line, pt. str)
+      elseif !empty(item) && str ==# '`'
+            \ && item.under =~? s:double_quote && !a:0
+            \ && s:GetItemProperty(a:lnum, sum + 1).name =~? s:back_quote
+            \ && s:IsInItItem(a:lnum, s:double_quote) > 0
+        let [line, pt, item] = s:HideItemAndReachStr(line, pt)
+      elseif !empty(item) && str ==# '$'
+            \ && item.under =~? s:double_quote && !a:0
+            \ && s:GetItemProperty(a:lnum, sum + 1).name =~? s:command_sub
+            \ && s:IsInItItem(a:lnum, s:double_quote) > 0
+        let [line, pt, item] = s:HideItemAndReachStr(line, pt)
+      elseif !empty(item) && (str ==# '}' || str ==# "'" || str ==# '"')
+        let item2 = s:GetItemProperty(a:lnum, sum + 1)
+        if item2.name ==# item.name && item2.depth + 1 == item.depth
+          let [line, pt, item] = s:HideItemAndReachStr(line, pt. str)
+        endif
+      endif
+      if !empty(item)
+        let pt .= str
+      endif
+      let sum += strlen(str)
+    endfor
+    if strlen(pt)
+      let pt = '\V'. pt
+      let line = substitute(line, pt, "", "")
+    endif
+    while line =~# '\\.'
+      let line = substitute(line, '\\.', s:GetItemLenSpaces(line, '\\.'), '')
+    endwhile
+    if line =~# '`.\{-}`'
+      let pt = '`.\{-}`'
+      let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), "")
+    endif
+  endif
+
+  return line
+endfunction
+
+function s:GetItemProperty(lnum, colnum)
+  let sum = 0
+  let name = {}
+  let name.name = ""
+  let name.under = ""
+  for lid in reverse(synstack(a:lnum, a:colnum))
+    if sum == 0
+      let name.name = synIDattr(lid, 'name')
+    elseif sum == 1
+      let name.under = synIDattr(lid, 'name')
+    endif
+    let sum += 1
+  endfor
+  let name.depth = sum
+
+  return name
+endfunction
+
+function s:HideHeadAndReachStr(line, str)
+  let line = a:line
+  let pt = '\V'. strpart(line, 0, matchend(line, a:str))
+  let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), "")
+
+  return line
+endfunction
+
+function s:HideItemAndReachStr(line, str)
+  let line = a:line
+  let pt = '\V'. a:str
+  let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), "")
+
+  return [line, "", {}]
+endfunction
+
 function s:GetTabAndSpaceSum(cline, cind, sstr, sind)
   if a:cline =~# '^\t'
     let tbind = matchend(a:cline, '\t*', 0)
@@ -737,12 +853,14 @@ endfunction
 function s:SkipItemsLines(lnum, item)
   let lnum = a:lnum
   let onum = lnum
+  let cdep = s:MatchSynId(v:lnum, 1, a:item)
   while lnum
-    if s:MatchSynId(lnum, 1, a:item) && s:GetPrevNonBlank(lnum)
+    let depth = s:MatchSynId(lnum, 1, a:item)
+    if cdep < depth && s:GetPrevNonBlank(lnum)
       let onum = lnum
       let lnum = s:prev_lnum
     else
-      if !s:MatchSynId(lnum, strlen(getline(lnum)), a:item)
+      if depth == s:MatchSynId(lnum, strlen(getline(lnum)), a:item)
         let lnum = onum
       endif
       break
@@ -753,86 +871,33 @@ function s:SkipItemsLines(lnum, item)
   return lnum
 endfunction
 
-function s:HideCommentStrAndVariable(line, lnum, ...)
+function s:HideCommentStr(line, lnum)
   let line = a:line
   if a:lnum && line =~# '\\\@<!\%(\\\\\)*\zs#'
         \ && line =~# '\%(\${\%(\h\w*\|\d\+\)#\=\|\${\=\)\@<!#'
-        \ || a:lnum && line =~# '\${\|}' && line =~# '[;&|`()]'
-        \ || a:lnum && a:0 && a:1
     let max = strlen(a:line)
     let sum = 0
     let pos = -1
-    let proc = 0
     let line = ""
     let pt = ""
     while sum < max
-      let name = synIDattr(synID(a:lnum, sum + 1, 1), "name")
-      if name !~? s:sh_comment. '\|'. s:sh_deref
-        if proc
-          let pt .= strpart(a:line, sum, 1)
-        else
-          if pos > -1
-            let pt = '^.\{'. (strchars(strpart(a:line, 0, pos))). '}\zs\V'. pt
-            let line .= s:GetItemLenSpaces(a:line, pt)
-            let pos = -1
-            let pt = ""
-          endif
-          let line .= strpart(a:line, sum, 1)
-        endif
-      else
-        let str = strpart(a:line, sum, 1)
-        if name =~? s:sh_deref && str ==# '}' && !proc
-          let line .= str
-          let line = s:GetItemLenSpaces(line, '^\V'. line)
+      if !s:MatchSynId(a:lnum, sum + 1, s:sh_comment)
+        if pos > -1
+          let pt = '^.\{'. (strchars(strpart(a:line, 0, pos))). '}\zs\V'. pt
+          let line .= s:GetItemLenSpaces(a:line, pt)
           let pos = -1
           let pt = ""
-          let sum += 1
-          continue
-        elseif name =~? s:sh_deref && str ==# '}'
-          let proc -= 1
-        elseif name =~? s:sh_deref && str ==# '$'
-          let proc += 1
         endif
+        let line .= strpart(a:line, sum, 1)
+      else
         if pos < 0
           let pos = sum
         endif
-        let pt .= str
+        let pt .= strpart(a:line, sum, 1)
       endif
       let sum += 1
     endwhile
-    if proc || strlen(pt)
-      let pt = '^.\{'. (strchars(strpart(a:line, 0, pos))). '}\zs\V'. pt
-      let line .= s:GetItemLenSpaces(a:line, pt)
-    endif
   endif
-
-  return line
-endfunction
-
-function s:HideQuoteStr(line, lnum, rev)
-  let line = a:line
-  let sum = match(a:line, '\%o47\|"', 0)
-  while sum > -1
-    let n = 0
-    for cid in reverse(synstack(a:lnum, sum + 1))
-      let cname = synIDattr(cid, 'name')
-      if !n && cname =~? s:sh_quote && a:rev
-        let line = strpart(a:line, sum + 1)
-        let n += 1
-      elseif !n && cname =~? s:sh_quote
-        let n += 1
-      elseif n && cname =~? s:d_or_s_quote
-        let line = strpart(a:line, 0, sum)
-        break
-      else
-        break
-      endif
-    endfor
-    if n && !a:rev
-      break
-    endif
-    let sum = match(a:line, '\%o47\|"', sum + 1)
-  endwhile
 
   return line
 endfunction
@@ -877,8 +942,7 @@ function s:MatchSynId(lnum, colnum, item)
   let sum = 0
   for cid in synstack(a:lnum, a:colnum)
     if synIDattr(cid, 'name') =~? a:item
-      let sum = 1
-      break
+      let sum += 1
     endif
   endfor
 
@@ -888,8 +952,7 @@ endfunction
 function s:GetQuoteHeadAndTail(line, lnum)
   let lnum = s:SkipItemsLines(a:lnum, s:d_or_s_quote. '\|'. s:sh_quote)
   if lnum != a:lnum
-    let line = s:HideQuoteStr(a:line, a:lnum, 1)
-    let line = s:HideQuoteStr(getline(lnum), lnum, 0). line
+    let line = s:HideAnyItemLine3(getline(lnum), lnum, 1). a:line
   else
     let line = a:line
   endif
@@ -929,11 +992,11 @@ endfunction
 function s:GetDerefHeadAndTail(line, lnum)
   let lnum = s:SkipItemsLines(a:lnum, s:sh_deref. '\|'. s:sh_deref_str)
   if lnum != a:lnum
-    if a:line =~# '[;&|`()]'
-      let line = s:HideCommentStrAndVariable(getline(lnum), lnum, 1). a:line
+    if a:line =~# '[;&|`(){}]'
+      let line = s:HideAnyItemLine3(getline(lnum), lnum, 1). a:line
     else
-      let line = s:HideCommentStrAndVariable(getline(lnum), lnum, 1)
-            \. s:HideCommentStrAndVariable(a:line, a:lnum, 1)
+      let line = s:HideAnyItemLine3(getline(lnum), lnum, 1)
+            \. s:HideAnyItemLine3(a:line, a:lnum, 1)
     endif
   else
     let line = a:line
@@ -954,6 +1017,14 @@ function s:GetSkipItemLinesHeadAndTail(line, lnum, ind)
       let line = s:GetNextContinueLine(getline(lnum), lnum)
       break
     elseif lname =~? s:d_or_s_quote. '\|'. s:sh_quote
+      if lname =~? s:double_quote
+        if s:MatchSynId(lnum, 1, s:sh_here_doc_eof)
+          continue
+        elseif s:MatchSynId(lnum, 1, s:back_quote)
+              \ && !s:IsInItItem(lnum, s:d_or_s_quote)
+          break
+        endif
+      endif
       let [line, lnum] = s:GetQuoteHeadAndTail(line, lnum)
       let ind = s:BackQuoteIndent(lnum, ind)
       break
@@ -961,7 +1032,7 @@ function s:GetSkipItemLinesHeadAndTail(line, lnum, ind)
       let [line, lnum, ind] = s:GetBackQuoteHeadAndTail(line, lnum, ind)
       break
     elseif lname =~? s:sh_deref_str && sum
-          \ || lname =~? s:sh_deref && strpart(getline(lnum), 0, 1) ==# '}'
+          \ || lname ==? s:sh_deref && strpart(getline(lnum), 0, 1) ==# '}'
       let [line, lnum] = s:GetDerefHeadAndTail(line, lnum)
       break
     elseif lname =~? s:sh_deref_str
@@ -970,11 +1041,6 @@ function s:GetSkipItemLinesHeadAndTail(line, lnum, ind)
   endfor
 
   return [line, lnum, ind]
-endfunction
-
-function s:ParenBraceBalanced(line, hide)
-  let line = a:hide ? s:HideAnyItemLine(a:line) : a:line
-  return !s:PairBalance(line, "{", "}") && !s:PairBalance(line, "(", ")")
 endfunction
 
 function s:OvrdIndentKeys(line)
@@ -1004,7 +1070,7 @@ endfunction
 
 function s:IsTailBackSlash2(item)
   let line = type(a:item) == type("")
-        \ ? a:item : s:HideCommentStrAndVariable(getline(a:item), a:item)
+        \ ? a:item : s:HideCommentStr(getline(a:item), a:item)
   return s:IsTailBackSlash(line)
         \ && !s:IsTailBar(line) && !s:IsTailNoContinue(line)
 endfunction
@@ -1068,8 +1134,8 @@ endfunction
 
 function s:EndOfTestQuotes(line, lnum, item)
   return a:line =~# '^\%("\|\%o47\)$'
-        \ || a:line =~# '\\\@<!\%(\\\\\)*\zs\%("\|\%o47\)$'
-        \ && synIDattr(synID(a:lnum, strlen(a:line) - 1, 1), "name") =~? a:item
+        \ || a:line =~# '\\\@<!\%(\\\\\)*\%("\|\%o47\)$'
+        \ && s:MatchSynId(a:lnum, strlen(a:line) - 1, a:item)
 endfunction
 
 function s:IndentCaseLabels()
@@ -1078,6 +1144,10 @@ endfunction
 
 function s:PairBalance(line, i1, i2)
   return len(split(a:line, a:i1, 1)) - len(split(a:line, a:i2, 1))
+endfunction
+
+function s:IsInItItem(lnum, item)
+  return s:MatchSynId(v:lnum, 1, a:item) - s:MatchSynId(a:lnum, 1, a:item)
 endfunction
 
 let &cpo = s:cpo_save
