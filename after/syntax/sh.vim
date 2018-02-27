@@ -1,14 +1,14 @@
 " after/syntax/sh.vim
-" Last Change:   Tue, 27 Feb 2018 01:11:36 +0900
+" Last Change:   Tue, 27 Feb 2018 17:44:07 +0900
 
 if exists("g:sh_indent_hide_after_syntax")
   finish
 endif
 
 syn cluster shNoQuoteList	contains=shDerefSimple,shDeref,shDoubleQuote,shSingleQuote,shExDoubleQuote,shExSingleQuote,shSpecial,shStringSpecial,shCommandSub
-syn cluster shEscSnglQuoteIn	contains=ALLBUT,shCaseSingleQuote,shTestSingleQuote,shSingleQuote,shStringSpecial,shSpecial,shDerefString,shComment,shQuickComment
-syn cluster shBraceExpIn	contains=ALLBUT,shDeref.*,.*Quote,.*Comment
-syn cluster shBraceExpList	contains=shEscape,shComma,shTwinDot,shNumber
+syn cluster shEscSnglQuoteIn	contains=ALLBUT,shCaseSingleQuote,shTestSingleQuote,shSingleQuote,shStringSpecial,shSpecial,shDerefString,shComment,shQuickComment,shHereDoc
+syn cluster shBraceExpIn	contains=ALLBUT,shDeref.*,.*Quote,.*Comment,shHereDoc
+syn cluster shCurlyList		add=shCurlyEscape,shTwinDot,shExSingleQuote,shDoubleQuote,shSingleQuote	remove=shDerefSpecial
 syn cluster shEchoList		remove=shExpr
 syn cluster shTestList		remove=shExpr
 if exists("b:is_kornshell") || exists("b:is_bash")
@@ -16,7 +16,7 @@ if exists("b:is_kornshell") || exists("b:is_bash")
 endif
 
 syn region  shNoQuote		contained	start="\S" skip="\\\@<!\%(\\\\\)*\\." end='\ze\s'	contains=@shNoQuoteList containedin=shDblBrace
-syn region  shTestDoubleQuote	contained	start='"'  skip='\\\@<!\%(\\\\\)*\\"' end='"'		contains=shDeref,shDerefSimple,shDerefSpecial
+syn region  shTestDoubleQuote	contained	start='"'  skip='\\\@<!\%(\\\\\)*\\"' end='"'		contains=shDeref,shDerefSimple
 syn region  shDoubleQuote	matchgroup=shQuote start=+"+ end=+"+					contains=@shDblQuoteList,shStringSpecial,@Spell
 
 syn match   shEscape		'\\\@<!\%(\\\\\)*\\.'			contained
@@ -30,8 +30,12 @@ endif
 syn match   shSpecial		"\\\@<!\%(\\\\\)*\\[\\"`$()#]"
 syn match   shEscSnglQuote	"\\\@<!\%(\\\\\)*\\'"			containedin=@shEscSnglQuoteIn
 hi def link shEscSnglQuote	shSpecial
-syn region  shBraceExpansion	matchgroup=Delimiter start="{\ze\%(\%([^{}]\|\\.\)\{-},\|[^{}]\+[.][.]\)" end="}" contains=@shBraceExpList containedin=@shBraceExpIn oneline
-syn match   shTwinDot		"[.][.]"				contained	containedin=shCurlyIn
+
+syn region  shCurlyIn		matchgroup=Delimiter start="{" end="}"	contained		contains=@shCurlyList oneline
+syn match   shBraceExpansion	+\\\@<!\%(\\\\\)*{\%(\%(\\.\|".\{-}\\\@<!\%(\\\\\)*"\|'[^']*'\|{[^{} \t]\+}\|[^{} \t]\)\{-},\|\%({[^{} \t]\+}\|[^{} \t]\)\+[.][.]\)+ contains=shCurlyIn containedin=@shBraceExpIn transparent
+syn match   shCurlyEscape	"\\\@<!\%(\\\\\)*\\."			contained
+syn match   shTwinDot		"[.][.]"				contained
+hi def link shCurlyEscape	shString
 hi def link shTwinDot		shComma
 hi def link shComma		shOperator
 
