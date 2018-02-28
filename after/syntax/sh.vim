@@ -1,5 +1,5 @@
 " after/syntax/sh.vim
-" Last Change:   Tue, 27 Feb 2018 17:44:07 +0900
+" Last Change:   Wed, 28 Feb 2018 20:22:10 +0900
 
 if exists("g:sh_indent_hide_after_syntax")
   finish
@@ -31,8 +31,7 @@ syn match   shSpecial		"\\\@<!\%(\\\\\)*\\[\\"`$()#]"
 syn match   shEscSnglQuote	"\\\@<!\%(\\\\\)*\\'"			containedin=@shEscSnglQuoteIn
 hi def link shEscSnglQuote	shSpecial
 
-syn region  shCurlyIn		matchgroup=Delimiter start="{" end="}"	contained		contains=@shCurlyList oneline
-syn match   shBraceExpansion	+\\\@<!\%(\\\\\)*{\%(\%(\\.\|".\{-}\\\@<!\%(\\\\\)*"\|'[^']*'\|{[^{} \t]\+}\|[^{} \t]\)\{-},\|\%({[^{} \t]\+}\|[^{} \t]\)\+[.][.]\)+ contains=shCurlyIn containedin=@shBraceExpIn transparent
+syn region  shBraceExpansion	matchgroup=Delimiter start=+\\\@<!\%(\\\\\)*\zs{\ze\%(\%(\\.\|".\{-}\\\@<!\%(\\\\\)*"\|'[^']*'\|{[^{} \t]\+}\|[^{} \t]\)\{-},\|\%({[^{} \t]\+}\|[^{} \t]\)\+[.][.]\)+ end="}" contains=@shCurlyList containedin=@shBraceExpIn oneline
 syn match   shCurlyEscape	"\\\@<!\%(\\\\\)*\\."			contained
 syn match   shTwinDot		"[.][.]"				contained
 hi def link shCurlyEscape	shString
