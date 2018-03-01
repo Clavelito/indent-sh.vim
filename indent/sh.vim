@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Mon, 26 Feb 2018 21:59:32 +0900
-" Version:          4.70
+" Last Change:      Thu, 01 Mar 2018 21:56:16 +0900
+" Version:          4.71
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -60,7 +60,6 @@ let s:double_quote = 'DoubleQuote'
 let s:sh_quote = 'shQuote'
 let s:sh_here_doc = 'HereDoc'
 let s:sh_here_doc_eof = 'HereDoc\d\d\|shRedir\d\d'
-let s:sh_echo = 'Echo'
 let s:sh_deref = 'PreProc'
 let s:sh_deref_str = 'Deref'
 
@@ -154,13 +153,13 @@ function s:MorePrevLineIndent(pline, pnum, line, lnum, ind)
     let ind = ind + shiftwidth()
   elseif (s:IsTailAndOr(a:pline) && !s:IsContinuLineFore(line)
         \ && !s:IsTailBar(a:line) && !s:IsFunctionLine(line)
-        \ && s:PairBalance(line, "{", "}") <= 0
-        \ && s:PairBalance(line, "(", ")") <= 0
         \ || (s:IsTailBar(a:pline) && !s:IsContinuLineFore(line)
         \ && !s:IsTailBar(a:line)
         \ || s:IsTailBackSlash(a:pline) && s:IsTailBar(a:line)
         \ && !g:sh_indent_tail_bar)
         \ && !s:IsInSideCase(pline))
+        \ && s:PairBalance(s:HideOptionStr(line), "{", "}") <= 0
+        \ && s:PairBalance(s:HideOptionStr(line), "(", ")") <= 0
         \ && !s:IsExprLineHead(line)
         \ || (s:IsTailBackSlash(a:pline) && !s:IsContinuLineFore(line)
         \ && !s:IsTailBar(a:line) && g:sh_indent_and_or_or
@@ -192,7 +191,7 @@ function s:PrevLineIndent(line, lnum, pline, rpline, ind)
   let [line, ind] = s:GetFunctionIndent(a:line, a:ind)
   let line = s:HideAnyItemLine2(line)
   let ind = s:PrevLineIndent0(a:pline, line, a:lnum, a:rpline, ind)
-  let ind = s:ParenBraceIndent(line, a:lnum, ind)
+  let ind = s:ParenBraceIndent(line, a:rpline, ind)
   let ind = s:CloseParenIndent(a:pline, line2, line, a:lnum, a:rpline, ind)
   let ind = s:CloseBraceIndent(a:pline, line2, line, a:lnum, a:rpline, ind)
 
@@ -200,7 +199,7 @@ function s:PrevLineIndent(line, lnum, pline, rpline, ind)
 endfunction
 
 function s:PrevLineIndent0(pline, line, lnum, rpline, ind)
-  if !s:IsHeadAndBarOr(a:line) && s:IsTailBackSlash2(a:rpline)
+  if !s:IsHeadAndBarOrSemiColon(a:line) && s:IsTailBackSlash2(a:rpline)
     return a:ind
   endif
   let ind = a:ind
@@ -325,7 +324,7 @@ function s:CloseBraceIndent(pline, line, nline, lnum, rpline, ind)
   let ind = a:ind
   let pt1 = '[;&]\C\s*\%(done\|fi\|esac\)\=\s*}\|^\s\+}'
   if a:nline =~# pt1 && a:nline !~# ';[;&]\s*$'
-        \ && !s:MatchSynId(a:lnum, 1, s:sh_echo)
+        \ && !s:IsTailBackSlash2(a:nline)
     if a:line =~# '^\s*}' && !s:IsInSideCase(a:pline)
       let ind = ind + shiftwidth()
     endif
@@ -338,15 +337,19 @@ function s:CloseBraceIndent(pline, line, nline, lnum, rpline, ind)
   return ind
 endfunction
 
-function s:ParenBraceIndent(line, lnum, ind)
+function s:ParenBraceIndent(line, rpline, ind)
   let ind = a:ind
-  let pt1 = '\%(\%(^\|;\|&\||\)\s*\|\%(do\|then\|else\)\s\+\)'
+  if s:IsTailBackSlash2(a:rpline)
+    let head_pt = '\%(;\|&\||\)'
+  else
+    let head_pt = '\%(^\|;\|&\||\)'
+  endif
+  let pt1 = '\%('. head_pt. '\s*\|\%(do\|then\|else\)\s\+\)'
         \. '\C\%(\%(if\|elif\|while\|until\)\s\+\)\=\%([!]\s\+\)\={'
   if a:line =~# '('
     let ind = ind + shiftwidth() * (len(split(a:line, '(', 1)) - 1)
   endif
-  if a:line =~# pt1
-        \ && a:line !~# ';[;&]\s*$' && !s:MatchSynId(a:lnum, 1, s:sh_echo)
+  if a:line =~# pt1 && a:line !~# ';[;&]\s*$'
     let ind = ind + shiftwidth() * (len(split(a:line, pt1, 1)) - 1)
   endif
 
@@ -372,14 +375,15 @@ function s:GetLessIndentLineIndent(lnum, ind, more)
           \ && !s:IsContinuLinePrev(line)
           \ && (s:IsExprLineTail(line)
           \ || !s:IsFunctionLine(line) && !s:IsExprLineHead(line)
-          \ && !s:IsHeadAndBarOr(line)
+          \ && !s:IsHeadAndBarOrSemiColon(line)
           \ && line !~# '^\s*\%(do\|then\|elif\|else\)\>'
-          \ && !s:PairBalance(line, "{", "}")
-          \ && !s:PairBalance(line, "(", ")"))
+          \ && !s:PairBalance(s:HideOptionStr(line), "{", "}")
+          \ && !s:PairBalance(s:HideOptionStr(line), "(", ")"))
       break
     elseif cind < ind && s:IsContinuLinePrev(line) && s:IsExprLineTail(line)
       let ind = cind
-    elseif cind < ind && !s:IsContinuLinePrev(line) && s:IsHeadAndBarOr(line)
+    elseif cind < ind
+          \ && !s:IsContinuLinePrev(line) && s:IsHeadAndBarOrSemiColon(line)
       continue
     elseif s:IsContinuLinePrev(line)
       let [line, lnum, ind] = s:GetContinueLineIndent(line, lnum, 1)
@@ -671,6 +675,23 @@ function s:HideBracePairs(line)
 
   return line
 endfunction
+
+function s:HideOptionStr(line)
+  let line = a:line
+  let pt1 = '[^ \t;&|#()<>`-]'
+  let pt2 = '\%([^ \t;&|()<>`]\+\)\='
+  let pt3 = '--\=[a-zA-Z]'
+  let pt4 = '\%(\s\+'. pt1. pt2. '\)\+'
+  for str in [pt1. '-'. pt2, pt3. pt2. pt4, pt3. pt2]
+    while line =~# str
+      let pt = '^.\{'. strchars(strpart(line, 0, match(line, str))). '}\zs'. str
+      let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), '')
+    endwhile
+  endfor
+
+  return line
+endfunction
+
 
 function s:HideAnyItemLine(line)
   let line = a:line
@@ -1072,8 +1093,7 @@ endfunction
 function s:IsTailBackSlash2(item)
   let line = type(a:item) == type("")
         \ ? a:item : s:HideCommentStr(getline(a:item), a:item)
-  return s:IsTailBackSlash(line)
-        \ && !s:IsTailBar(line) && !s:IsTailNoContinue(line)
+  return s:IsTailBackSlash(line) && !s:IsTailNoContinue(line)
 endfunction
 
 function s:IsExprLineHead(line)
@@ -1093,8 +1113,8 @@ function s:IsFunctionLine(line)
         \ || a:line =~# '^\s*function\s\+\S\+\s*$'
 endfunction
 
-function s:IsHeadAndBarOr(line)
-  return a:line =~# '^\s*\%(&&\|||\=\)'
+function s:IsHeadAndBarOrSemiColon(line)
+  return a:line =~# '^\s*\%(&&\=\|||\=\|;[^;&]\)'
 endfunction
 
 function s:IsTailAndOr(line)
