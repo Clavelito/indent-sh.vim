@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Thu, 01 Mar 2018 21:56:16 +0900
-" Version:          4.71
+" Last Change:      Sat, 03 Mar 2018 20:35:16 +0900
+" Version:          4.72
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -437,9 +437,9 @@ function s:SkipCommentLine(line, lnum, prev)
     let lnum = 0
   endif
   while lnum && line =~# '^\s*#' && s:GetPrevNonBlank(lnum)
-        \ && s:MatchSynId(lnum, match(line,'#') + 1, s:sh_comment)
-        \ && (line !~# '\\\@<!\%(\\\\\)*\zs`'
-        \ || s:HideCommentStr(line, lnum) =~# '^\s*$')
+        \ && !s:MatchSynId(lnum, match(line,'#') + 1, s:sh_here_doc_eof)
+        \ && !(line =~# '\\\@<!\%(\\\\\)*\zs`'
+        \ && s:MatchSynId(lnum, 1, s:back_quote))
     let lnum = s:prev_lnum
     let line = getline(lnum)
   endwhile
@@ -754,7 +754,7 @@ function s:HideAnyItemLine3(line, lnum, ...)
         endif
       elseif empty(item) && str ==# '#'
         let item = s:GetItemProperty(a:lnum, sum + 1)
-        if item.name !~? s:sh_comment
+        if item.name !~? s:sh_comment && item.name !~? s:back_quote
           let item = {}
         endif
       elseif empty(item) && str ==# '}'
@@ -763,6 +763,10 @@ function s:HideAnyItemLine3(line, lnum, ...)
       elseif !empty(item) && item.name =~? s:sh_comment
             \ && !s:MatchSynId(a:lnum, sum + 1, s:sh_comment)
         let [line, pt, item] = s:HideItemAndReachStr(line, pt. str)
+      elseif !empty(item) && str ==# '`'
+            \ && pt =~# '^#' && item.name =~? s:back_quote
+            \ && s:GetItemProperty(a:lnum, sum + 1).name =~? s:back_quote
+        let [line, pt, item] = s:HideItemAndReachStr(line, pt)
       elseif !empty(item) && str ==# '`'
             \ && item.under =~? s:double_quote && !a:0
             \ && s:GetItemProperty(a:lnum, sum + 1).name =~? s:back_quote
@@ -872,10 +876,10 @@ function s:InsideHereDocIndent(snum, cline)
   return ind
 endfunction
 
-function s:SkipItemsLines(lnum, item)
+function s:SkipItemsLines(lnum, item, ...)
   let lnum = a:lnum
   let onum = lnum
-  let cdep = s:MatchSynId(v:lnum, 1, a:item)
+  let cdep = a:0 ? 0 : s:MatchSynId(v:lnum, 1, a:item)
   while lnum
     let depth = s:MatchSynId(lnum, 1, a:item)
     if cdep < depth && s:GetPrevNonBlank(lnum)
@@ -897,28 +901,31 @@ function s:HideCommentStr(line, lnum)
   let line = a:line
   if a:lnum && line =~# '\\\@<!\%(\\\\\)*\zs#'
         \ && line =~# '\%(\${\%(\h\w*\|\d\+\)#\=\|\${\=\)\@<!#'
-    let max = strlen(a:line)
     let sum = 0
-    let pos = -1
-    let line = ""
     let pt = ""
-    while sum < max
-      if !s:MatchSynId(a:lnum, sum + 1, s:sh_comment)
-        if pos > -1
-          let pt = '^.\{'. (strchars(strpart(a:line, 0, pos))). '}\zs\V'. pt
-          let line .= s:GetItemLenSpaces(a:line, pt)
-          let pos = -1
+    let comt = 0
+    for str in split(line, '\zs')
+      let item = s:GetItemProperty(a:lnum, sum + 1)
+      if item.name =~? s:back_quote && str ==# '#' && !strlen(pt)
+        let comt = 1
+      elseif item.name =~? s:back_quote && str ==# '`' && strlen(pt)
+        let comt = 0
+      endif
+      if item.name =~? s:sh_comment || comt
+        let pt .= str
+      else
+        if strlen(pt)
+          let pt = '\V'. pt. str
+          let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), "")
           let pt = ""
         endif
-        let line .= strpart(a:line, sum, 1)
-      else
-        if pos < 0
-          let pos = sum
-        endif
-        let pt .= strpart(a:line, sum, 1)
       endif
-      let sum += 1
-    endwhile
+      let sum += strlen(str)
+    endfor
+    if strlen(pt)
+      let pt = '\V'. pt
+      let line = substitute(line, pt, "", "")
+    endif
   endif
 
   return line
@@ -930,7 +937,7 @@ function s:BackQuoteIndent(lnum, ind)
   if line !~# '\\\@<!\%(\\\\\)*\zs`'
     return ind
   endif
-  let lnum = s:SkipItemsLines(a:lnum, s:back_quote)
+  let lnum = s:SkipItemsLines(a:lnum, s:back_quote, 1)
   let sum = 0
   let csum = 0
   let pnum = 0
@@ -1148,7 +1155,7 @@ function s:IsContinuLinePrev(line)
 endfunction
 
 function s:IsInSideCase(line)
-  return a:line =~# '\%(^\%(\s*\%(do\|then\|else\)\s\+\)\=\|[;&|`(){}]\)'
+  return a:line =~# '\%(^\%(\s*\%(do\|then\|else\)\s\+\)\=\|[;&|`(){]\)'
         \. '\s*case\>\%(.*;[;&]\s*\<esac\>\)\@!'
         \ || a:line =~# ';[;&]\s*$'
 endfunction
