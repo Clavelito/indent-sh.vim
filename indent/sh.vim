@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Sat, 03 Mar 2018 20:35:16 +0900
-" Version:          4.72
+" Last Change:      Sat, 03 Mar 2018 22:35:24 +0900
+" Version:          4.73
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -734,7 +734,8 @@ function s:HideAnyItemLine3(line, lnum, ...)
   let item = {}
   let pt = ""
   let sum = 0
-  if line =~# '[;&|`(){}]' && line =~# '[$"#,]\|\%o47\|\\.\|\V..' || a:0 && a:1
+  if line =~# '[;&|`(){}]' && line =~# '[$",]\|\%o47\|\\.\|\V..'
+        \ || line =~# '#' || a:0 && a:1
     for str in split(line, '\zs')
       if empty(item) && str !~# '[$`"#}'. "']"
         let sum += strlen(str)
