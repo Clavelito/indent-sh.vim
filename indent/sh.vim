@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Sat, 03 Mar 2018 22:35:24 +0900
-" Version:          4.73
+" Last Change:      Tue, 06 Mar 2018 00:07:48 +0900
+" Version:          4.74
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -99,7 +99,8 @@ function GetShIndent()
   for cid in reverse(synstack(lnum, strlen(line)))
     let cname = synIDattr(cid, 'name')
     if cname =~? s:sh_here_doc. '$'
-      let lnum = s:SkipItemsLines(v:lnum, s:sh_here_doc.'\|'. s:sh_here_doc_eof)
+      let lnum = s:SkipItemsLines(v:lnum,
+            \ s:sh_here_doc.'\|'. s:sh_here_doc_eof, 1)
       let ind = s:InsideHereDocIndent(lnum, cline)
       return ind
     elseif cname =~? s:test_d_or_s_quote
@@ -519,14 +520,17 @@ endfunction
 function s:GetNextContinueLine(line, lnum)
   let line = a:line
   let lnum = a:lnum
+  let line = s:HideAnyItemLine3(line, lnum)
   while line =~# '\\\@<!\%(\\\\\)*\\$' && s:GetNextNonBlank(lnum) == lnum + 1
     let line = s:HideTailBackSlash(line)
     let lnum = s:next_lnum
     let line .= getline(lnum)
   endwhile
   unlet! s:next_lnum
-  let line = s:HideAnyItemLine(line)
-  let line = substitute(line, '\(;\|&\||\|)\|\s\)#.*$', '\1', "")
+  if lnum != a:lnum
+    let line = s:HideAnyItemLine(line)
+    let line = substitute(line, '\(;\|&\||\|\s\)#.*$', '\1', "")
+  endif
 
   return line
 endfunction
@@ -601,6 +605,7 @@ endfunction
 function s:CaseLabelLineIndent(line, ind)
   let line = a:line
   let ind = a:ind
+  let wid = ind
   let sum = 0
   while 1
     let sum = matchend(line, ')', sum)
@@ -612,11 +617,14 @@ function s:CaseLabelLineIndent(line, ind)
     if line =~# '^\s*(' && balance == 0 || balance == -1
       let pt = '^\V'. head
       let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), "")
+      let end = matchend(line, '\%("\s*"\|\s\)*')
+      let wid = strdisplaywidth(strpart(line, 0, end))
+      let line = strpart(line, end)
       break
     endif
   endwhile
   if line !~# '^\s*$' && line !~# ';[;&]\s*$' && line !~# '^\s*#'
-    let ind = strdisplaywidth(strpart(line, 0, matchend(line, '\s*')))
+    let ind = wid
   else
     let ind = ind + shiftwidth()
   endif
@@ -634,8 +642,12 @@ function s:GetItemLenSpaces(line, item)
   let len = strdisplaywidth(line, pos1)
   let line = ""
   while len
-    let line .= " "
     let len -= 1
+    if !strlen(line) && len || strlen(line) && !len
+      let line .= '"'
+    else
+      let line .= " "
+    endif
   endwhile
 
   return line
@@ -645,8 +657,8 @@ function s:HideQuotePairs(line, pos, bq)
   let line = a:line
   while 1
     let item = {}
-    if strpart(line, a:pos) =~# '".\{-}"'
-      let item[match(line, '"', a:pos)] = '".\{-}"'
+    if strpart(line, a:pos) =~# '"\@<!\%(""\)*"..\{-}"'
+      let item[match(line, '"', a:pos)] = '"\@<!\%(""\)*"..\{-}"'
     endif
     if strpart(line, a:pos) =~# "'[^']*'"
       let item[match(line, "'", a:pos)] = "'[^']*'"
@@ -659,7 +671,7 @@ function s:HideQuotePairs(line, pos, bq)
     endif
     let val = min(keys(item))
     let pt = '^.\{'. (strchars(strpart(line, 0, val))). '}\zs'. item[val]
-    let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), '')
+    let line = substitute(line, pt, '""', '')
   endwhile
 
   return line
@@ -667,7 +679,7 @@ endfunction
 
 function s:HideBracePairs(line)
   let line = a:line
-  let pt1 = '\%(&\s*\||\s*\)\@<!{[^{}]\{-}}'
+  let pt1 = '{[^{}]\{-}}'
   while line =~# pt1
     let pt = '^.\{'. (strchars(strpart(line, 0, match(line, pt1)))). '}\zs'. pt1
     let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), '')
@@ -697,7 +709,7 @@ function s:HideAnyItemLine(line)
   let line = a:line
   if line =~# '[;&|`(){}]'
     while line =~# '\\.'
-      let line = substitute(line, '\\.', s:GetItemLenSpaces(line, '\\.'), '')
+      let line = substitute(line, '\\.', "", '')
     endwhile
     if line =~# '\$((\@!.*)'
       let line = s:HideQuotePairs(line, matchend(line, '\$((\@!'), 1)
@@ -748,6 +760,16 @@ function s:HideAnyItemLine3(line, lnum, ...)
       elseif empty(item) && (str ==# "'" || str ==# '"')
         let item = s:GetItemProperty(a:lnum, sum + 1)
         if item.name !~? s:sh_quote
+          let item = {}
+        elseif item.name =~? s:sh_quote && item.under !~? s:d_or_s_quote
+              \ && str ==# '"' && sum && line =~# '^"' && a:line !~# '^"'
+          let str = '"\s*"[^"]*'. str
+          let line = s:HideHeadAndReachStr(line, str)
+          let item = {}
+        elseif item.name =~? s:sh_quote && item.under !~? s:d_or_s_quote
+              \ && str ==# '"' && sum
+          let str = '\%("\s*"[^"]*\)*'. str
+          let line = s:HideHeadAndReachStr(line, str)
           let item = {}
         elseif item.name =~? s:sh_quote && item.under !~? s:d_or_s_quote
           let line = s:HideHeadAndReachStr(line, str)
