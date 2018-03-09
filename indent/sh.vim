@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Tue, 06 Mar 2018 03:10:43 +0900
-" Version:          4.76
+" Last Change:      Sat, 10 Mar 2018 03:08:03 +0900
+" Version:          4.77
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -883,7 +883,7 @@ function s:InsideHereDocIndent(snum, cline)
   else
     let ind = indent(v:lnum)
   endif
-  if !&expandtab && a:cline =~# '^\t*'
+  if !&expandtab && a:cline =~# '^\t*' && strlen(a:cline)
     let sind = indent(a:snum)
     let [tbind, spind] = s:GetTabAndSpaceSum(a:cline, ind, sstr, sind)
     if spind >= &tabstop
