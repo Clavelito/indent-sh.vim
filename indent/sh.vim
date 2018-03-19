@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Sat, 10 Mar 2018 03:08:03 +0900
-" Version:          4.77
+" Last Change:      Mon, 19 Mar 2018 11:53:35 +0900
+" Version:          4.78
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -101,7 +101,9 @@ function GetShIndent()
     if cname =~? s:sh_here_doc. '$'
       let lnum = s:SkipItemsLines(v:lnum,
             \ s:sh_here_doc.'\|'. s:sh_here_doc_eof, 1)
-      let ind = s:InsideHereDocIndent(lnum, cline)
+      let enum = getline(lnum) =~# '<<-' && !&expandtab
+            \ ? s:GetHereDocEof(lnum + 1) : 0
+      let ind = s:InsideHereDocIndent(lnum, enum, cline)
       return ind
     elseif cname =~? s:test_d_or_s_quote
           \ && s:EndOfTestQuotes(line, lnum, s:test_d_or_s_quote)
@@ -623,10 +625,10 @@ function s:CaseLabelLineIndent(line, ind)
       break
     endif
   endwhile
-  if line !~# '^\s*$' && line !~# ';[;&]\s*$' && line !~# '^\s*#'
-    let ind = wid
-  else
+  if line =~# '^\s*\%(:\s*\)\=$' || line =~# ';[;&]\s*$' || line =~# '^\s*#'
     let ind = ind + shiftwidth()
+  else
+    let ind = wid
   endif
   if line =~# ';[;&]\s*$'
     let ind = ind - shiftwidth()
@@ -762,7 +764,7 @@ function s:HideAnyItemLine3(line, lnum, ...)
         if item.name !~? s:sh_quote
           let item = {}
         elseif item.name =~? s:sh_quote && item.under !~? s:d_or_s_quote
-              \ && str ==# '"' && sum && line =~# '^"' && a:line !~# '^"'
+              \ && str ==# '"' && sum && line =~# '^"'
           let str = '"\s*"[^"]*'. str
           let line = s:HideHeadAndReachStr(line, str)
           let item = {}
@@ -862,35 +864,42 @@ function s:HideItemAndReachStr(line, str)
   return [line, "", {}]
 endfunction
 
-function s:GetTabAndSpaceSum(cline, cind, sstr, sind)
-  if a:cline =~# '^\t'
-    let tbind = matchend(a:cline, '\t*', 0)
-  else
-    let tbind = 0
+function s:GetHereDocEof(lnum)
+  let lnum = a:lnum
+  while lnum && s:GetNextNonBlank(lnum)
+        \ && s:MatchSynId(lnum, 1, s:sh_here_doc. '$')
+    let lnum = getline(lnum) =~# '^\t*[ ]' ? 0 : s:next_lnum
+  endwhile
+  unlet! s:next_lnum
+  if lnum && !s:MatchSynId(lnum, 1, s:sh_here_doc_eof)
+    let lnum = 0
   endif
-  let spind = a:cind - tbind * &tabstop
-  if a:sstr =~# '<<-' && a:sind
-    let tbind = a:sind / &tabstop
-  endif
-
-  return [tbind, spind]
+  
+  return lnum
 endfunction
 
-function s:InsideHereDocIndent(snum, cline)
+function s:InsideHereDocIndent(snum, enum, cline)
   let sstr = getline(a:snum)
   if !&expandtab && sstr =~# '<<-' && !strlen(a:cline)
     let ind = indent(a:snum)
   else
     let ind = indent(v:lnum)
   endif
-  if !&expandtab && a:cline =~# '^\t*' && strlen(a:cline)
+  if !&expandtab && a:cline =~# '^\t*' && strlen(a:cline) && sstr =~# '<<-'
     let sind = indent(a:snum)
-    let [tbind, spind] = s:GetTabAndSpaceSum(a:cline, ind, sstr, sind)
+    let eind = a:enum ? indent(a:enum) - sind : 0
+    let tbind = a:cline =~# '^\t' ? matchend(a:cline, '\t*', 0) : 0
+    let spind = strdisplaywidth(matchstr(a:cline, '\s*', tbind), sind)
+    let tbind = sind ? sind / &tabstop : 0
     if spind >= &tabstop
       let b:sh_indent_tabstop = &tabstop
       let &tabstop = spind + 1
     endif
-    let ind = tbind * &tabstop + spind
+    if spind || !a:enum
+      let ind = tbind * &tabstop + spind
+    else
+      let ind -= eind
+    endif
   elseif &expandtab && a:cline =~# '^\t' && sstr =~# '<<-'
     let tbind = matchend(a:cline, '\t*', 0)
     let ind = ind - tbind * &tabstop
