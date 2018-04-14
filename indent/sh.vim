@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Mon, 19 Mar 2018 11:53:35 +0900
-" Version:          4.78
+" Last Change:      Sat, 14 Apr 2018 18:08:05 +0900
+" Version:          4.79
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -99,20 +99,14 @@ function GetShIndent()
   for cid in reverse(synstack(lnum, strlen(line)))
     let cname = synIDattr(cid, 'name')
     if cname =~? s:sh_here_doc. '$'
-      let lnum = s:SkipItemsLines(v:lnum,
-            \ s:sh_here_doc.'\|'. s:sh_here_doc_eof, 1)
-      let enum = getline(lnum) =~# '<<-' && !&expandtab
-            \ ? s:GetHereDocEof(lnum + 1) : 0
-      let ind = s:InsideHereDocIndent(lnum, enum, cline)
-      return ind
-    elseif cname =~? s:test_d_or_s_quote
-          \ && s:EndOfTestQuotes(line, lnum, s:test_d_or_s_quote)
+      return s:InsideHereDocIndent(lnum, cline)
+    elseif cname =~? s:test_d_or_s_quote && s:EndOfTestQuotes(line, lnum)
       break
     elseif cname =~? s:back_quote
       let sum += 1
     elseif cname =~? s:double_quote && sum
       break
-    elseif cname =~? s:d_or_s_quote. '\|'. s:sh_deref_str. '$'
+    elseif cname =~? s:d_or_s_quote || cname =~? s:sh_deref_str. '$'
       return indent(v:lnum)
     endif
   endfor
@@ -180,7 +174,7 @@ function s:InsideCaseLabelIndent(pline, line, ind)
   let line = a:line
   if line =~# ')' && a:line !~# '^\s*case\>' && s:IsInSideCase(a:pline)
     let [line, ind] = s:CaseLabelLineIndent(line, ind)
-  elseif line =~# ';[;&]\s*$' && a:line !~# '^\s*case\>\%(.\{-}\<esac\>\)\@!'
+  elseif s:IsCaseEnd(line) && a:line !~# '^\s*case\>\%(.\{-}\<esac\>\)\@!'
     let ind = s:CaseBreakIndent(ind)
   elseif s:IsTailBackSlash(a:line) && s:IsInSideCase(a:pline)
     let line = ""
@@ -217,7 +211,7 @@ function s:PrevLineIndent0(pline, line, lnum, rpline, ind)
     if str =~# '^\s*\%(then\|do\)\>' && s:IsInSideCase(a:pline) && ind == a:ind
       let ind = s:CaseLabelNextIndent(ind) + shiftwidth()
     endif
-    if a:line =~# ';[;&]\s*$' && !s:case_count
+    if s:IsCaseEnd(a:line) && !s:case_count
       let ind = a:ind
     endif
     unlet s:case_count
@@ -284,7 +278,7 @@ function s:CurrentLineIndent(line, lnum, cline, pline, ind)
     return a:ind
   endif
   let ind = a:ind
-  if a:cline =~# '^\s*esac\>' && a:line !~# ';[;&]\s*$'
+  if a:cline =~# '^\s*esac\>' && !s:IsCaseEnd(a:line)
     let ind = s:CaseBreakIndent(ind)
   elseif a:cline =~# '^\s*\%(then\|do\)\>[-=+.]\@!' && s:IsInSideCase(a:pline)
     let ind = s:CaseLabelNextIndent(ind) + shiftwidth()
@@ -310,7 +304,7 @@ endfunction
 function s:CloseParenIndent(pline, line, nline, lnum, rpline, ind)
   let ind = a:ind
   if a:nline =~# ')' && a:nline !~# '^\s*case\>'
-        \ && a:nline !~# ';[;&]\s*$' && !s:IsInSideCase(a:pline)
+        \ && !s:IsCaseEnd(a:nline) && !s:IsInSideCase(a:pline)
     if a:line =~# '^\s*)'
       let ind = ind + shiftwidth()
     endif
@@ -326,7 +320,7 @@ endfunction
 function s:CloseBraceIndent(pline, line, nline, lnum, rpline, ind)
   let ind = a:ind
   let pt1 = '[;&]\C\s*\%(done\|fi\|esac\)\=\s*}\|^\s\+}'
-  if a:nline =~# pt1 && a:nline !~# ';[;&]\s*$'
+  if a:nline =~# pt1 && !s:IsCaseEnd(a:nline)
         \ && !s:IsTailBackSlash2(a:nline)
     if a:line =~# '^\s*}' && !s:IsInSideCase(a:pline)
       let ind = ind + shiftwidth()
@@ -352,7 +346,7 @@ function s:ParenBraceIndent(line, rpline, ind)
   if a:line =~# '('
     let ind = ind + shiftwidth() * (len(split(a:line, '(', 1)) - 1)
   endif
-  if a:line =~# pt1 && a:line !~# ';[;&]\s*$'
+  if a:line =~# pt1 && !s:IsCaseEnd(a:line)
     let ind = ind + shiftwidth() * (len(split(a:line, pt1, 1)) - 1)
   endif
 
@@ -406,20 +400,14 @@ endfunction
 function s:GetFunctionIndent(line, ind)
   let line = a:line
   let ind = a:ind
-  if line =~# '\%(^\|;\|&\||\)\s*\%(\h\w*\|\S\+\)\s*(\s*)\s*{'
+  if line =~# '\%(^\|;\|&\||\)\s*\%(\h\w*\|\S\+\)\s*(\s*)\s*[{(]'
     let line = substitute(line,
-          \ '\%(^\|;\|&\||\)\zs\s*\%(\h\w*\|\S\+\)\s*(\s*)\s*{', '', '')
+          \ '\%(^\|;\|&\||\)\zs\s*\%(\h\w*\|\S\+\)\s*(\s*)\s*[{(]', '', '')
     let ind = ind + shiftwidth()
-  elseif line =~# '\%(^\|;\|&\||\)\s*\%(\h\w*\|\S\+\)\s*(\s*)\s*('
+  elseif line =~# '\%(^\|;\|&\||\)\s*function\s\+\S\+\s*(\s*)\s*[{(]'
     let line = substitute(line,
-          \ '\%(^\|;\|&\||\)\zs\s*\%(\h\w*\|\S\+\)\s*(\s*)\s*(', '(', '')
-  elseif line =~# '\%(^\|;\|&\||\)\s*function\s\+\S\+\s*(\s*)\s*{'
-    let line = substitute(line,
-          \ '\%(^\|;\|&\||\)\zs\s*function\s\+\S\+\s*(\s*)\s*{', '', '')
+          \ '\%(^\|;\|&\||\)\zs\s*function\s\+\S\+\s*(\s*)\s*[{(]', '', '')
     let ind = ind + shiftwidth()
-  elseif line =~# '\%(^\|;\|&\||\)\s*function\s\+\S\+\s*(\s*)\s*('
-    let line = substitute(line,
-          \ '\%(^\|;\|&\||\)\zs\s*function\s\+\S\+\s*(\s*)\s*(', '(', '')
   elseif line =~# '\%(^\|;\|&\||\)\s*function\s\+\S\+\s\+{'
     let line = substitute(line,
           \ '\%(^\|;\|&\||\)\zs\s*function\s\+\S\+\s\+{', '', '')
@@ -625,12 +613,12 @@ function s:CaseLabelLineIndent(line, ind)
       break
     endif
   endwhile
-  if line =~# '^\s*\%(:\s*\)\=$' || line =~# ';[;&]\s*$' || line =~# '^\s*#'
+  if line =~# '^\s*\%(:\s*\)\=$' || s:IsCaseEnd(line) || line =~# '^\s*#'
     let ind = ind + shiftwidth()
   else
     let ind = wid
   endif
-  if line =~# ';[;&]\s*$'
+  if s:IsCaseEnd(line)
     let ind = ind - shiftwidth()
   endif
 
@@ -814,7 +802,7 @@ function s:HideAnyItemLine3(line, lnum, ...)
       let sum += strlen(str)
     endfor
     if strlen(pt)
-      let pt = '\V'. pt
+      let pt = '\V'. substitute(pt, '\\', '\\\\', "g")
       let line = substitute(line, pt, "", "")
     endif
     while line =~# '\\.'
@@ -849,17 +837,16 @@ function s:GetItemProperty(lnum, colnum)
 endfunction
 
 function s:HideHeadAndReachStr(line, str)
-  let line = a:line
-  let pt = '\V'. strpart(line, 0, matchend(line, a:str))
-  let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), "")
+  let pt = strpart(a:line, 0, matchend(a:line, a:str))
+  let pt = '\V'. substitute(pt, '\\', '\\\\', "g")
+  let line = substitute(a:line, pt, s:GetItemLenSpaces(a:line, pt), "")
 
   return line
 endfunction
 
 function s:HideItemAndReachStr(line, str)
-  let line = a:line
-  let pt = '\V'. a:str
-  let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), "")
+  let pt = '\V'. substitute(a:str, '\\', '\\\\', "g")
+  let line = substitute(a:line, pt, s:GetItemLenSpaces(a:line, pt), "")
 
   return [line, "", {}]
 endfunction
@@ -878,16 +865,18 @@ function s:GetHereDocEof(lnum)
   return lnum
 endfunction
 
-function s:InsideHereDocIndent(snum, enum, cline)
-  let sstr = getline(a:snum)
+function s:InsideHereDocIndent(lnum, cline)
+  let snum = s:SkipItemsLines(a:lnum, s:sh_here_doc, 1)
+  let sstr = getline(snum)
   if !&expandtab && sstr =~# '<<-' && !strlen(a:cline)
-    let ind = indent(a:snum)
+    let ind = indent(snum)
   else
     let ind = indent(v:lnum)
   endif
   if !&expandtab && a:cline =~# '^\t*' && strlen(a:cline) && sstr =~# '<<-'
-    let sind = indent(a:snum)
-    let eind = a:enum ? indent(a:enum) - sind : 0
+    let sind = indent(snum)
+    let enum = s:GetHereDocEof(snum + 1)
+    let eind = enum ? indent(enum) - sind : 0
     let tbind = a:cline =~# '^\t' ? matchend(a:cline, '\t*', 0) : 0
     let spind = strdisplaywidth(matchstr(a:cline, '\s*', tbind), sind)
     let tbind = sind ? sind / &tabstop : 0
@@ -895,7 +884,7 @@ function s:InsideHereDocIndent(snum, enum, cline)
       let b:sh_indent_tabstop = &tabstop
       let &tabstop = spind + 1
     endif
-    if spind || !a:enum
+    if spind || !enum
       let ind = tbind * &tabstop + spind
     else
       let ind -= eind
@@ -947,7 +936,7 @@ function s:HideCommentStr(line, lnum)
         let pt .= str
       else
         if strlen(pt)
-          let pt = '\V'. pt. str
+          let pt = '\V'. substitute(pt. str, '\\', '\\\\', "g")
           let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), "")
           let pt = ""
         endif
@@ -955,7 +944,7 @@ function s:HideCommentStr(line, lnum)
       let sum += strlen(str)
     endfor
     if strlen(pt)
-      let pt = '\V'. pt
+      let pt = '\V'. substitute(pt, '\\', '\\\\', "g")
       let line = substitute(line, pt, "", "")
     endif
   endif
@@ -1186,16 +1175,20 @@ function s:IsContinuLinePrev(line)
         \ || a:line =~# '\%(&&\|||\=\)\s*\\\=$'
 endfunction
 
+function s:IsCaseEnd(line)
+  return a:line =~# ';[;&]\s*$'
+endfunction
+
 function s:IsInSideCase(line)
-  return a:line =~# '\%(^\%(\s*\%(do\|then\|else\)\s\+\)\=\|[;&|`(){]\)'
-        \. '\s*case\>\%(.*;[;&]\s*\<esac\>\)\@!'
+  return a:line =~# '\%(\%(^\|[;&]\)\%(\s*\%(do\|then\|else\)\s\+\)\='
+        \. '\|[;&|`(){]\)\s*case\>\%(.*;[;&]\s*\<esac\>\)\@!'
         \ || a:line =~# ';[;&]\s*$'
 endfunction
 
-function s:EndOfTestQuotes(line, lnum, item)
+function s:EndOfTestQuotes(line, lnum)
   return a:line =~# '^\%("\|\%o47\)$'
         \ || a:line =~# '\\\@<!\%(\\\\\)*\%("\|\%o47\)$'
-        \ && s:MatchSynId(a:lnum, strlen(a:line) - 1, a:item)
+        \ && s:MatchSynId(a:lnum, strlen(a:line) - 1, s:test_d_or_s_quote)
 endfunction
 
 function s:IndentCaseLabels()
