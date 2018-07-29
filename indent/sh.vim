@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Maintainer:       Clavelito <maromomo@hotmail.com>
-" Last Change:      Sat, 14 Apr 2018 18:08:05 +0900
-" Version:          4.79
+" Last Change:      Sun, 29 Jul 2018 13:43:00 +0900
+" Version:          4.80
 "
 " Description:
 "                   let g:sh_indent_case_labels = 0
@@ -480,10 +480,8 @@ function s:GetPrevContinueLine(line, lnum, ...)
   if s:MatchSynId(last_lnum, 1, s:d_or_s_quote. '\|'. s:sh_quote)
     let [last_line, last_lnum] = s:GetQuoteHeadAndTail(last_line, last_lnum)
     let [pline, pnum] = s:SkipCommentLine(last_line, last_lnum, 1)
-    if s:IsContinuLinePrev(pline)
-      let [line, lnum, nline, last_lnum] = s:GetPrevContinueLine(pline, pnum, 1)
-      let last_line = nline. last_line
-    endif
+    let [line, lnum, nline, last_lnum] = s:GetPrevContinueLine(pline, pnum, 1)
+    let last_line = nline. last_line
   endif
 
   if a:0 && lnum == 1 && s:IsContinuLinePrev(line)
@@ -767,7 +765,7 @@ function s:HideAnyItemLine3(line, lnum, ...)
         endif
       elseif empty(item) && str ==# '#'
         let item = s:GetItemProperty(a:lnum, sum + 1)
-        if item.name !~? s:sh_comment && item.name !~? s:back_quote
+        if item.name !~? s:sh_comment
           let item = {}
         endif
       elseif empty(item) && str ==# '}'
@@ -776,10 +774,6 @@ function s:HideAnyItemLine3(line, lnum, ...)
       elseif !empty(item) && item.name =~? s:sh_comment
             \ && !s:MatchSynId(a:lnum, sum + 1, s:sh_comment)
         let [line, pt, item] = s:HideItemAndReachStr(line, pt. str)
-      elseif !empty(item) && str ==# '`'
-            \ && pt =~# '^#' && item.name =~? s:back_quote
-            \ && s:GetItemProperty(a:lnum, sum + 1).name =~? s:back_quote
-        let [line, pt, item] = s:HideItemAndReachStr(line, pt)
       elseif !empty(item) && str ==# '`'
             \ && item.under =~? s:double_quote && !a:0
             \ && s:GetItemProperty(a:lnum, sum + 1).name =~? s:back_quote
@@ -802,7 +796,7 @@ function s:HideAnyItemLine3(line, lnum, ...)
       let sum += strlen(str)
     endfor
     if strlen(pt)
-      let pt = '\V'. substitute(pt, '\\', '\\\\', "g")
+      let pt = '\V'. escape(pt, '\')
       let line = substitute(line, pt, "", "")
     endif
     while line =~# '\\.'
@@ -837,15 +831,14 @@ function s:GetItemProperty(lnum, colnum)
 endfunction
 
 function s:HideHeadAndReachStr(line, str)
-  let pt = strpart(a:line, 0, matchend(a:line, a:str))
-  let pt = '\V'. substitute(pt, '\\', '\\\\', "g")
+  let pt = '\V'. escape(strpart(a:line, 0, matchend(a:line, a:str)), '\')
   let line = substitute(a:line, pt, s:GetItemLenSpaces(a:line, pt), "")
 
   return line
 endfunction
 
 function s:HideItemAndReachStr(line, str)
-  let pt = '\V'. substitute(a:str, '\\', '\\\\', "g")
+  let pt = '\V'. escape(a:str, '\')
   let line = substitute(a:line, pt, s:GetItemLenSpaces(a:line, pt), "")
 
   return [line, "", {}]
@@ -924,19 +917,13 @@ function s:HideCommentStr(line, lnum)
         \ && line =~# '\%(\${\%(\h\w*\|\d\+\)#\=\|\${\=\)\@<!#'
     let sum = 0
     let pt = ""
-    let comt = 0
     for str in split(line, '\zs')
       let item = s:GetItemProperty(a:lnum, sum + 1)
-      if item.name =~? s:back_quote && str ==# '#' && !strlen(pt)
-        let comt = 1
-      elseif item.name =~? s:back_quote && str ==# '`' && strlen(pt)
-        let comt = 0
-      endif
-      if item.name =~? s:sh_comment || comt
+      if item.name =~? s:sh_comment
         let pt .= str
       else
         if strlen(pt)
-          let pt = '\V'. substitute(pt. str, '\\', '\\\\', "g")
+          let pt = '\V'. escape(pt. str, '\')
           let line = substitute(line, pt, s:GetItemLenSpaces(line, pt), "")
           let pt = ""
         endif
@@ -944,7 +931,7 @@ function s:HideCommentStr(line, lnum)
       let sum += strlen(str)
     endfor
     if strlen(pt)
-      let pt = '\V'. substitute(pt, '\\', '\\\\', "g")
+      let pt = '\V'. escape(pt, '\')
       let line = substitute(line, pt, "", "")
     endif
   endif
