@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Wed, 01 Aug 2018 17:41:43 +0900
-" Version:          5.0
+" Last Change:      Mon, 06 Aug 2018 12:21:58 +0900
+" Version:          5.1
 
 
 if exists("b:did_indent")
@@ -337,8 +337,8 @@ function s:CloseTailIndent(lnum, ind, item)
   endwhile
   let lnum = searchpair(pt1, "", pt2, "nbW", expr)
   if lnum > 0 && lnum != a:lnum && indent(lnum) < indent(a:lnum)
-      let ind = searchpair(pt1, "", pt2, "rmbW", expr, lnum) - 1
-      let ind = indent(lnum) + ind * shiftwidth() + s:CsInd
+    let ind = searchpair(pt1, "", pt2, "rmbW", expr, lnum) - 1
+    let ind = indent(lnum) + ind * shiftwidth() + s:CsInd
   endif
   call setpos(".", pos)
   return ind
@@ -422,7 +422,8 @@ endfunction
 
 function s:IsCloseBrace(l, n)
   let pt = '\%(}\s\+\)\@<=}\|;\s*\%(done\|fi\|esac\)\=\s*\zs}'
-  return s:IsOutside(a:l, a:n, pt)
+  let pos = s:IsOutside(a:l, a:n, pt)
+  return pos && !s:IsSubSt(a:n, pos)
 endfunction
 
 function s:IsCloseParen(l, n)
