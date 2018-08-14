@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Mon, 06 Aug 2018 12:21:58 +0900
-" Version:          5.1
+" Last Change:      Tue, 14 Aug 2018 14:34:04 +0900
+" Version:          5.2
 
 
 if exists("b:did_indent")
@@ -68,7 +68,7 @@ function s:PrevLineIndent(line, lnum, pline, pnum)
   elseif s:IsCase(a:pline, a:pnum) || s:IsCaseBreak(a:pline, a:pnum)
     let ind = s:CaseLabelIndent(a:line, a:lnum, ind)
   elseif a:line =~# ')\|`' && s:IsSubSt(a:lnum, 1) && !s:IsSubSt(v:lnum, 1)
-        \ && !s:IsContinue(a:line, a:lnum) && !s:IsBackSlash(a:line, a:lnum)
+        \ && !s:IsBackSlash(a:line, a:lnum)
     let ind = s:ContinueLineIndent(a:line, a:lnum, s:subst)
   elseif a:line =~# '"\|\%o47' && s:IsQuote(a:pnum, a:pline)
     let ind = s:ContinueLineIndent(a:line, a:lnum, s:quote)
@@ -267,14 +267,16 @@ function s:ContinueLineIndent(line, lnum, ...)
     let [line, lnum, onum] = s:SkipContinue(a:1, a:2, a:line, 1)
   endif
   let ind = indent(onum)
+  let oline = getline(onum)
   if s:SubstCount(onum, 1) < s:SubstCount(v:lnum, 1)
     let ind += shiftwidth() * (s:SubstCount(v:lnum, 1) - s:SubstCount(onum, 1))
-  elseif (s:IsCase(line, lnum) || s:IsCaseBreak(line, lnum))
-        \ && !s:IsEsac(getline(onum))
+  elseif (s:IsCase(line, lnum) || s:IsCaseBreak(line, lnum)) && !s:IsEsac(oline)
     let ind = s:CaseLabelIndent(a:line, a:lnum, ind)
   elseif !s:IsCase(line, lnum) && !s:IsCaseBreak(line, lnum)
         \ && s:IsBackSlash(a:line, a:lnum)
     let ind += shiftwidth()
+  elseif oline =~# '^\s*\%(if\|elif\|while\|until\)\>'
+    let ind = s:ControlStatementIndent(oline, onum, ind)
   elseif s:CsInd
     let ind += s:CsInd
   endif
