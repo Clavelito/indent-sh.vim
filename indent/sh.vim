@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Tue, 14 Aug 2018 14:34:04 +0900
-" Version:          5.2
+" Last Change:      Thu, 16 Aug 2018 06:13:35 +0900
+" Version:          5.3
 
 
 if exists("b:did_indent")
@@ -121,7 +121,7 @@ function s:CurrentLineIndent(cline, line, lnum, ind)
         \ || a:cline =~# '^\s*}'
     let ind -= shiftwidth()
   elseif a:cline =~# '^\s*)'
-    let ind = s:CloseHeadParenIndent(ind)
+    let ind = s:CloseHeadParenIndent(a:cline, ind)
   elseif a:cline =~# '^\s*!$' && s:IsContinue(a:line, a:lnum)
     call s:OvrdIndentKeys("{,(")
   elseif (a:cline =~# '^\s*\%(!\s\+\)\={' && !s:IsCloseBrace(a:cline, v:lnum)
@@ -283,12 +283,16 @@ function s:ContinueLineIndent(line, lnum, ...)
   return ind
 endfunction
 
-function s:CloseHeadParenIndent(ind)
+function s:CloseHeadParenIndent(line, ind)
   let ind = a:ind
   let expr = 's:IsInside(line("."),col("."))'
   let pos = getpos(".")
-  call cursor(0, 1)
-  let s:root = s:IsSubSt(v:lnum, 1)
+  if strpart(a:line, col(".") - 1, 1) ==# ")"
+    call search('.\n\=)', "bW")
+  else
+    call cursor(0, 1)
+  endif
+  let s:root = s:IsSubSt(line("."), col("."))
   let lnum = searchpair("(", "", ")", "bW", expr)
   unlet s:root
   if lnum > 0
