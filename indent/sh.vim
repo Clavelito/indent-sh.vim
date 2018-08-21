@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Thu, 16 Aug 2018 06:13:35 +0900
-" Version:          5.3
+" Last Change:      Tue, 21 Aug 2018 16:20:24 +0900
+" Version:          5.4
 
 
 if exists("b:did_indent")
@@ -92,9 +92,6 @@ function s:PrevLineIndent(line, lnum, pline, pnum)
         \ && (s:IsContinue(a:pline, a:pnum) || s:IsBackSlash(a:pline, a:pnum))
     let ind = s:ContinueLineIndent(a:line, a:lnum, a:pline, a:pnum)
   endif
-  if s:IsCaseBreak(a:line, a:lnum)
-    let ind -= shiftwidth()
-  endif
   if s:IsCloseBrace(a:line, a:lnum)
         \ && !s:IsBackSlash(a:line, a:lnum) && !s:IsContinue(a:line, a:lnum)
         \ && !s:IsOpenBrace(a:line, a:lnum) && !s:IsOpenParen(a:line, a:lnum)
@@ -103,7 +100,9 @@ function s:PrevLineIndent(line, lnum, pline, pnum)
         \ && !s:IsBackSlash(a:line, a:lnum) && !s:IsContinue(a:line, a:lnum)
     let ind = s:CloseTailParenIndent(a:lnum, ind)
   endif
-  if s:IsDoThen(a:line, a:lnum) && !s:CsInd
+  if s:IsCaseBreak(a:line, a:lnum)
+    let ind -= shiftwidth()
+  elseif s:IsDoThen(a:line, a:lnum) && !s:CsInd
     let ind += shiftwidth()
   endif
   return ind
@@ -218,7 +217,7 @@ function s:CaseLabelIndent(line, lnum, ind)
   let ind = a:ind
   if !s:IsBackSlash(a:line, a:lnum) && !s:IsEsac(a:line)
     let ind += shiftwidth()
-    let pos = s:IsOutside(a:line, a:lnum, '\\\@<!\%(\\\\\)*)')
+    let pos = s:IsOutside(a:line, a:lnum, s:noesc. ")")
     let line = strpart(a:line, pos)
     while pos
       let line = " ". line
@@ -293,12 +292,12 @@ function s:CloseHeadParenIndent(line, ind)
     call cursor(0, 1)
   endif
   let s:root = s:IsSubSt(line("."), col("."))
-  let lnum = searchpair("(", "", ")", "bW", expr)
+  let lnum = searchpair(s:noesc. "(", "", s:noesc. ")", "bW", expr)
   unlet s:root
   if lnum > 0
     let sum = 0
     let lcol = col(".")
-    while search('(\%(\s*)\)\@!', "bW", lnum)
+    while search(s:noesc. '(\%(\s*)\)\@!', "bW", lnum)
       if eval(expr)
         continue
       elseif col(".") == lcol - 1
@@ -308,6 +307,7 @@ function s:CloseHeadParenIndent(line, ind)
         let sum += 1
       endif
     endwhile
+    let sum = s:IfStartInCaseLabel(lnum, sum)
     let ind = indent(lnum) + sum * shiftwidth()
   endif
   call setpos(".", pos)
@@ -317,7 +317,8 @@ endfunction
 function s:CloseTailBraceIndent(lnum, ind)
   let item = [
         \ '\<\%(if\|elif\|while\|until\)\s\+\%(!\s\+\)\=\zs{'
-        \. '\|\%({\s\+\)\@<={\|\%(^\|;\|&&\|||\=\)\s*\%(!\s\)\=\s*\zs{',
+        \. '\|\%({\s\+\)\@<={\|\%(&&\|||\=\)\s*\%(!\s\)\=\s*\zs{'
+        \. '\|'. s:front. '\%(!\s\)\=\s*\zs{',
         \ '\%(}\s\+\)\@<=}\|\%(^\|;\s*\%(done\|fi\|esac\)\=\)\s*\zs}',
         \ '\%(}\s\+\)\@<=}\|;\s*\%(done\|fi\|esac\)\=\s*\zs}' ]
   return s:CloseTailIndent(a:lnum, a:ind, item)
@@ -344,10 +345,16 @@ function s:CloseTailIndent(lnum, ind, item)
   let lnum = searchpair(pt1, "", pt2, "nbW", expr)
   if lnum > 0 && lnum != a:lnum && indent(lnum) < indent(a:lnum)
     let ind = searchpair(pt1, "", pt2, "rmbW", expr, lnum) - 1
+    let ind = s:IfStartInCaseLabel(lnum, ind)
     let ind = indent(lnum) + ind * shiftwidth() + s:CsInd
   endif
   call setpos(".", pos)
   return ind
+endfunction
+
+function s:IfStartInCaseLabel(lnum, sum)
+  let [line, lnum] = s:SkipCommentLine(a:lnum)
+  return s:IsCase(line, lnum) || s:IsCaseBreak(line, lnum) ? a:sum + 1 : a:sum
 endfunction
 
 function s:SkipHereDocLine()
@@ -422,14 +429,13 @@ function s:IsOpenBrace(l, n)
 endfunction
 
 function s:IsOpenParen(l, n)
-  let pt = '(\ze\s*\%(#.*\)\=$'
+  let pt = s:noesc. '(\ze\s*\%(#.*\)\=$'
   return s:IsOutside(a:l, a:n, pt)
 endfunction
 
 function s:IsCloseBrace(l, n)
   let pt = '\%(}\s\+\)\@<=}\|;\s*\%(done\|fi\|esac\)\=\s*\zs}'
-  let pos = s:IsOutside(a:l, a:n, pt)
-  return pos && !s:IsSubSt(a:n, pos)
+  return s:IsOutside(a:l, a:n, pt)
 endfunction
 
 function s:IsCloseParen(l, n)
@@ -455,7 +461,7 @@ function s:IsEsac(l)
 endfunction
 
 function s:IsBackSlash(l, n)
-  return a:l =~# '\\\@<!\%(\\\\\)*\\$' && !s:IsComment(a:n, a:l)
+  return a:l =~# s:noesc. '\\$' && !s:IsComment(a:n, a:l)
 endfunction
 
 function s:IsContinueNorm(l, n)
@@ -530,6 +536,7 @@ endfunction
 let s:front = '\%(\%(^\|;\)\s*\%(then\s\|do\s\|else\s\)\=\|)\|(\|`\)\s*'
 let s:rear1 = '\%(\\\=$\|\s\|;\|&\||\|<\|>\|)\|}\|`\)'
 let s:rear2 = '\%(\\\=$\|\s\|(\)'
+let s:noesc = '\\\@<!\%(\\\\\)*'
 
 let s:quote = '\c'. 'string$\|\%(test.*\)\@<!...quote$'
 let s:hered = '\c'. 'heredoc$'
