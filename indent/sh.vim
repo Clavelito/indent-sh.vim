@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Tue, 21 Aug 2018 16:20:24 +0900
-" Version:          5.4
+" Last Change:      Wed, 29 Aug 2018 18:33:26 +0900
+" Version:          5.5
 
 
 if exists("b:did_indent")
@@ -423,7 +423,7 @@ endfunction
 
 function s:IsOpenBrace(l, n)
   let pt = '\%(^\|;\|&&\|||\=\)\s*\%(!\s\)\=\s*{\ze\s*\%(#.*\)\=$'
-        \. '\|^\s*\h\w*\s*()\s*{\ze\s*\%(#.*\)\=$'
+        \. '\|^\s*\%(\h\w*\|\S\+\)\s*()\s*{\ze\s*\%(#.*\)\=$'
         \. '\|^\s*function\s\+\S\+\%(\s*()\)\=\s*{\ze\s*\%(#.*\)\=$'
   return s:IsOutside(a:l, a:n, pt)
 endfunction
@@ -538,7 +538,7 @@ let s:rear1 = '\%(\\\=$\|\s\|;\|&\||\|<\|>\|)\|}\|`\)'
 let s:rear2 = '\%(\\\=$\|\s\|(\)'
 let s:noesc = '\\\@<!\%(\\\\\)*'
 
-let s:quote = '\c'. 'string$\|\%(test.*\)\@<!...quote$'
+let s:quote = '\c'. 'string$\|\%(test.*\)\@<!.....quote$'
 let s:hered = '\c'. 'heredoc$'
 let s:comnt = '\c'. 'comment$'
 let s:subst = '\c'. 'subst$\|commandsub'
