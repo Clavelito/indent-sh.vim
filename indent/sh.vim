@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Wed, 29 Aug 2018 18:33:26 +0900
-" Version:          5.5
+" Last Change:      Thu, 30 Aug 2018 19:25:22 +0900
+" Version:          5.6
 
 
 if exists("b:did_indent")
@@ -42,7 +42,7 @@ function GetShIndent()
     unlet b:sh_indent_indentkeys
   endif
   let line = getline(lnum)
-  if s:IsQuote(lnum, line)
+  if s:IsQuote(lnum, line, 1)
     return indent(v:lnum)
   elseif s:IsHereDoc(lnum, line)
     return s:HereDocIndent(cline)
@@ -470,7 +470,7 @@ function s:IsContinueNorm(l, n)
 endfunction
 
 function s:IsContinue(l, n)
-  let pt1 = '\%(&&\|||\=\)\ze\s*\%(#.*\|\\\)\=$'
+  let pt1 = '.\ze\%(&&\|||\=\)\s*\%(#.*\|\\\)\=$'
   let pt2 = '^\s*\%(if\|elif\|while\|until\)\>\s*\%(#.*\|\\\)\=$'
   return s:IsOutside(a:l, a:n, pt1) || a:l =~# pt2
 endfunction
@@ -497,8 +497,8 @@ function s:SubstCount(n, p)
         \ 'synIDattr(v:val, "name") =~? s:subst'), 1)
 endfunction
 
-function s:IsQuote(n, p)
-  return s:MatchSyntaxItem(a:n, a:p, s:quote,
+function s:IsQuote(n, p, ...)
+  return s:MatchSyntaxItem(a:n, a:p, a:0 ? s:noret : s:quote,
         \ exists("s:root") ? s:root : s:IsSubSt(a:n, a:p))
 endfunction
 
@@ -538,7 +538,8 @@ let s:rear1 = '\%(\\\=$\|\s\|;\|&\||\|<\|>\|)\|}\|`\)'
 let s:rear2 = '\%(\\\=$\|\s\|(\)'
 let s:noesc = '\\\@<!\%(\\\\\)*'
 
-let s:quote = '\c'. 'string$\|\%(test.*\)\@<!.....quote$'
+let s:noret = '\c'. 'string$\|\%(test.*\)\@<!.....quote$'
+let s:quote = '\c'. 'string$\|...quote$'
 let s:hered = '\c'. 'heredoc$'
 let s:comnt = '\c'. 'comment$'
 let s:subst = '\c'. 'subst$\|commandsub'
