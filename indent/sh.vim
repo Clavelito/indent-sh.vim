@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Thu, 30 Aug 2018 19:25:22 +0900
-" Version:          5.6
+" Last Change:      Sun, 10 Mar 2019 20:16:20 +0900
+" Version:          5.7
 
 
 if exists("b:did_indent")
@@ -43,9 +43,12 @@ function GetShIndent()
   endif
   let line = getline(lnum)
   if s:IsQuote(lnum, line, 1)
+    unlet! s:TbSum
     return indent(v:lnum)
   elseif s:IsHereDoc(lnum, line)
     return s:HereDocIndent(cline)
+  else
+    unlet! s:TbSum
   endif
   let [line, lnum] = s:SkipCommentLine(lnum, line)
   let [pline, pnum] = s:SkipCommentLine(lnum)
@@ -87,7 +90,7 @@ function s:PrevLineIndent(line, lnum, pline, pnum)
         \ && s:SubstCount(a:lnum, 1) < s:SubstCount(a:lnum, a:line)
     let ind = s:OpenSubStIndent(a:pline, a:pnum, a:lnum, ind)
   elseif s:IsOpenBrace(a:line, a:lnum) || s:IsOpenParen(a:line, a:lnum)
-    let ind += shiftwidth()
+    let ind = indent(s:SkipContinue(a:pline, a:pnum, a:lnum)) + shiftwidth()
   elseif !s:IsContinueNorm(a:line, a:lnum) && !s:IsBackSlash(a:line, a:lnum)
         \ && (s:IsContinue(a:pline, a:pnum) || s:IsBackSlash(a:pline, a:pnum))
     let ind = s:ContinueLineIndent(a:line, a:lnum, a:pline, a:pnum)
@@ -274,7 +277,7 @@ function s:ContinueLineIndent(line, lnum, ...)
   elseif !s:IsCase(line, lnum) && !s:IsCaseBreak(line, lnum)
         \ && s:IsBackSlash(a:line, a:lnum)
     let ind += shiftwidth()
-  elseif oline =~# '^\s*\%(if\|elif\|while\|until\)\>'
+  elseif oline =~# '^\s*\%(if\|elif\|while\|until\|foreach\)\>'
     let ind = s:ControlStatementIndent(oline, onum, ind)
   elseif s:CsInd
     let ind += s:CsInd
@@ -359,11 +362,40 @@ endfunction
 
 function s:SkipHereDocLine()
   let pos = getpos(".")
-  while search('[<]\@<!<<-\=', "bW") && s:IsHereDoc(line("."), 1)
+  while search('<\@<!<<<\@!-\=', "bW") && s:IsHereDoc(line("."), 1)
   endwhile
   let lnum = line(".")
   call setpos(".", pos)
   return lnum
+endfunction
+
+function s:SpaceHereDoc(lnum)
+  let pos = getpos(".")
+  call cursor(a:lnum, 1)
+  let sum = search('^\t*[ ]', "W")
+        \ && s:IsHereDoc(line("."), 1)
+        \ && s:SkipHereDocLine() == a:lnum ? 1 : 0
+  call setpos(".", pos)
+  return sum
+endfunction
+
+function s:TabHereDoc(lnum, tab)
+  if exists("s:TbSum") && has_key(s:TbSum, v:lnum)
+    let val = s:TbSum[v:lnum]
+    let s:TbSum = { nextnonblank(v:lnum + 1) : val }
+    return val
+  endif
+  let pos = getpos(".")
+  call cursor(a:lnum, 1)
+  let sum = matchend(getline(search('^\t*\S', "W")), '\t*', 0)
+  while search('^\t\{-,'. sum. '}\S', "W")
+        \ && s:IsHereDoc(line("."), 1)
+        \ && s:SkipHereDocLine() == a:lnum
+    let sum = matchend(getline("."), '\t*', 0)
+  endwhile
+  call setpos(".", pos)
+  let s:TbSum = { nextnonblank(v:lnum + 1) :  a:tab - sum }
+  return a:tab - sum
 endfunction
 
 function s:HereDocIndent(cline)
@@ -373,17 +405,28 @@ function s:HereDocIndent(cline)
     let ind = indent(onum)
   else
     let ind = indent(v:lnum)
+    unlet! s:TbSum
   endif
-  if !&expandtab && strlen(a:cline) && oline =~# '<<-'
+  if !&expandtab && oline =~# '<<-' && strlen(a:cline) && a:cline !~# '^\s\+$'
+    let sttab = ind / &tabstop
     let tbind = a:cline =~# '^\t' ? matchend(a:cline, '\t*', 0) : 0
-    let spind = strdisplaywidth(matchstr(a:cline, '\s*', tbind), ind)
-    let tbind = ind ? ind / &tabstop : 0
+    let spind = s:IsHereDoc(v:lnum, 1)
+          \ ? strdisplaywidth(matchstr(a:cline, '\s*', tbind), ind) : 0
+    if s:SpaceHereDoc(onum) || !s:IsHereDoc(v:lnum, 1)
+      let tbind = sttab
+      unlet! s:TbSum
+    else
+      let tbind += s:TabHereDoc(onum, sttab)
+    endif
     if spind >= &tabstop
       let b:sh_indent_tabstop = &tabstop
       let &tabstop = spind + 1
     endif
     let ind = tbind * &tabstop + spind
-  elseif &expandtab && a:cline =~# '^\t' && oline =~# '<<-'
+  elseif !&expandtab && oline =~# '<<-'
+    let ind = &autoindent ? indent(v:lnum) : ind
+    unlet! s:TbSum
+  elseif &expandtab && oline =~# '<<-' && a:cline =~# '^\t'
     let tbind = matchend(a:cline, '\t*', 0)
     let ind = ind - tbind * &tabstop
   endif
@@ -465,7 +508,7 @@ function s:IsBackSlash(l, n)
 endfunction
 
 function s:IsContinueNorm(l, n)
-  let pt = '\%(&&\|||\)\ze\s*\%(#.*\|\\\)\=$'
+  let pt = '.\ze\%(&&\|||\)\s*\%(#.*\|\\\)\=$'
   return s:IsOutside(a:l, a:n, pt)
 endfunction
 
