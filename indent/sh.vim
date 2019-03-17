@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Sun, 10 Mar 2019 20:16:20 +0900
-" Version:          5.7
+" Last Change:      Sun, 17 Mar 2019 16:48:35 +0900
+" Version:          5.8
 
 
 if exists("b:did_indent")
@@ -11,7 +11,8 @@ endif
 let b:did_indent = 1
 
 setlocal indentexpr=GetShIndent()
-setlocal indentkeys+=0=then,0=do,0=elif,0=fi,0=esac,0=done,0=end,0),0<!>,0(
+setlocal indentkeys+=0=then,0=do,0=elif,0=fi,0=esac,0=done
+setlocal indentkeys+=0=read,0=end,0),0<!>,0(
 setlocal indentkeys-=:,0#
 
 let b:undo_indent = 'setlocal indentexpr< indentkeys<'
@@ -28,11 +29,6 @@ let s:cpo_save = &cpo
 set cpo&vim
 
 function GetShIndent()
-  let lnum = prevnonblank(v:lnum - 1)
-  let cline = getline(v:lnum)
-  if lnum == 0 || cline =~# '^#'
-    return 0
-  endif
   if exists("b:sh_indent_tabstop")
     let &tabstop = b:sh_indent_tabstop
     unlet b:sh_indent_tabstop
@@ -41,12 +37,21 @@ function GetShIndent()
     let &indentkeys = b:sh_indent_indentkeys
     unlet b:sh_indent_indentkeys
   endif
+  let lnum = prevnonblank(v:lnum - 1)
+  if lnum == 0
+    unlet! s:TbSum
+    return 0
+  endif
+  let cline = getline(v:lnum)
   let line = getline(lnum)
   if s:IsQuote(lnum, line, 1)
     unlet! s:TbSum
     return indent(v:lnum)
   elseif s:IsHereDoc(lnum, line)
     return s:HereDocIndent(cline)
+  elseif cline =~# '^#'
+    unlet! s:TbSum
+    return 0
   else
     unlet! s:TbSum
   endif
@@ -120,6 +125,7 @@ function s:CurrentLineIndent(cline, line, lnum, ind)
         \ || a:cline =~# '^\s*\%(else\|elif\)\>'. s:rear2
         \ || a:cline =~# '^\s*end\>'. s:rear1 && &ft ==# 'zsh'
         \ || a:cline =~# '^\s*\%(then\|do\)\>'. s:rear2 && s:CsInd > 0
+        \ || a:cline =~# '^\s*read\>\%(\\\=$\|\s\)' && s:CsInd > 0
         \ || a:cline =~# '^\s*}'
     let ind -= shiftwidth()
   elseif a:cline =~# '^\s*)'
@@ -132,7 +138,7 @@ function s:CurrentLineIndent(cline, line, lnum, ind)
     call s:OvrdIndentKeys("},)")
     let ind = indent(s:SkipContinue(a:line, a:lnum, v:lnum))
   endif
-  if a:cline =~# '^\s*[deft]' && ind < indent(v:lnum)
+  if a:cline =~# '^\s*[defrt]' && ind < indent(v:lnum)
     call s:OvrdIndentKeys()
   endif
   unlet s:CsInd
@@ -270,14 +276,17 @@ function s:ContinueLineIndent(line, lnum, ...)
   endif
   let ind = indent(onum)
   let oline = getline(onum)
-  if s:SubstCount(onum, 1) < s:SubstCount(v:lnum, 1)
+  if s:SubstCount(onum, 1) < s:SubstCount(v:lnum, 1) && s:CsInd
+    let ind = indent(a:lnum) + s:CsInd
+  elseif s:SubstCount(onum, 1) < s:SubstCount(v:lnum, 1)
     let ind += shiftwidth() * (s:SubstCount(v:lnum, 1) - s:SubstCount(onum, 1))
   elseif (s:IsCase(line, lnum) || s:IsCaseBreak(line, lnum)) && !s:IsEsac(oline)
     let ind = s:CaseLabelIndent(a:line, a:lnum, ind)
   elseif !s:IsCase(line, lnum) && !s:IsCaseBreak(line, lnum)
         \ && s:IsBackSlash(a:line, a:lnum)
     let ind += shiftwidth()
-  elseif oline =~# '^\s*\%(if\|elif\|while\|until\|foreach\)\>'
+  elseif oline =~# '^\s*\%(if\|elif\|while\|until\)\>'
+        \ || oline =~# '^\s*foreach\>' && &ft ==# 'zsh'
     let ind = s:ControlStatementIndent(oline, onum, ind)
   elseif s:CsInd
     let ind += s:CsInd
@@ -445,7 +454,7 @@ function s:OvrdIndentKeys(...)
   else
     setlocal indentkeys+=a,b,c,d,<e>,f,g,h,i,j,k,l,m,n,<o>,p,q,r,s,t,u,v,w,x,y,z
     setlocal indentkeys+=A,B,C,D,E,F,G,H,I,J,K,L,M,N,<O>,P,Q,R,S,T,U,V,W,X,Y,Z
-    setlocal indentkeys+=1,2,3,4,5,6,7,8,9,<0>,_,-,=,+,.,<Space>
+    setlocal indentkeys+=1,2,3,4,5,6,7,8,9,<0>,_,-,=,+,.
   endif
 endfunction
 
