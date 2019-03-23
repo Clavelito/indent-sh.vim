@@ -3,3 +3,8 @@ No warranty Please try at your own risk.
 Version 5.x is not interchangeable with previous versions.
 
 This is not a gg=G filter.
+
+Required syntax enable.
+
+If you do not want to indent case labels, set the next line.
+let g:sh_indent_case_labels = 0
