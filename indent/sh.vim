@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Sun, 17 Mar 2019 16:48:35 +0900
-" Version:          5.8
+" Last Change:      Thu, 11 Apr 2019 07:41:27 +0900
+" Version:          5.9
 
 
 if exists("b:did_indent")
@@ -296,7 +296,7 @@ endfunction
 
 function s:CloseHeadParenIndent(line, ind)
   let ind = a:ind
-  let expr = 's:IsInside(line("."),col("."))'
+  let expr = 's:IsInside(line("."),col("."))||s:IsCaseParen(line("."),col("."))'
   let pos = getpos(".")
   if strpart(a:line, col(".") - 1, 1) ==# ")"
     call search('.\n\=)', "bW")
@@ -533,6 +533,24 @@ function s:IsDoThen(l, n)
         \. '\|\%('. s:front. '\<\%(while\|until\|for\|select\)\>.*\)\@<!'
         \. ';\s*do\>\%(.*;\s*done\>\)\@!'
   return s:IsOutside(a:l, a:n, pt)
+endfunction
+
+function s:IsCaseParen(n, p)
+  let pt = '\%(\<case\>\|;&\|;;'
+        \. '\%(\s*esac\>\|\s*\%(#.*\)\=\n\%(\_^\s*\%(#.*\)\=\n\)*'
+        \. '\_^\s*esac\>\)\@!\)'
+        \. '\%("\%(\\\@<!\%(\\\\\)*\\"\|\_[^"]\)\{-}"\|'. "'\\_[^']*'"
+        \. '\|\\\@<!\%(\\\\\)*\\.\|#.*\_$'
+  if strpart(getline(a:n), a:p - 1, 1) ==# ")"
+    let pt .= '\|\_[^)]\)\+)'
+  else
+    let pt .= '\|\_[^()]\)\+('
+  endif
+  let pos = getpos(".")
+  let lnum = search(pt, "cbeW")
+  let cnum = col(".")
+  call setpos(".", pos)
+  return a:n == lnum && a:p == cnum
 endfunction
 
 function s:NumOrStr(p)
