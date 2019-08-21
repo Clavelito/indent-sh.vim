@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Thu, 11 Apr 2019 07:41:27 +0900
-" Version:          5.9
+" Last Change:      Wed, 21 Aug 2019 09:32:42 +0900
+" Version:          5.10
 
 
 if exists("b:did_indent")
@@ -94,7 +94,7 @@ function s:PrevLineIndent(line, lnum, pline, pnum)
   elseif a:line =~# '\$(\|`' && s:IsSubSt(v:lnum, 1)
         \ && s:SubstCount(a:lnum, 1) < s:SubstCount(a:lnum, a:line)
     let ind = s:OpenSubStIndent(a:pline, a:pnum, a:lnum, ind)
-  elseif s:IsOpenBrace(a:line, a:lnum) || s:IsOpenParen(a:line, a:lnum)
+  elseif s:IsOpenParen(a:line, a:lnum)
     let ind = indent(s:SkipContinue(a:pline, a:pnum, a:lnum)) + shiftwidth()
   elseif !s:IsContinueNorm(a:line, a:lnum) && !s:IsBackSlash(a:line, a:lnum)
         \ && (s:IsContinue(a:pline, a:pnum) || s:IsBackSlash(a:pline, a:pnum))
@@ -102,7 +102,6 @@ function s:PrevLineIndent(line, lnum, pline, pnum)
   endif
   if s:IsCloseBrace(a:line, a:lnum)
         \ && !s:IsBackSlash(a:line, a:lnum) && !s:IsContinue(a:line, a:lnum)
-        \ && !s:IsOpenBrace(a:line, a:lnum) && !s:IsOpenParen(a:line, a:lnum)
     let ind = s:CloseTailBraceIndent(a:lnum, ind)
   elseif s:IsCloseDoubleParen(a:line, a:lnum) && &ft !=# 'zsh'
         \ && !s:IsBackSlash(a:line, a:lnum) && !s:IsContinue(a:line, a:lnum)
@@ -110,7 +109,9 @@ function s:PrevLineIndent(line, lnum, pline, pnum)
   endif
   if s:IsCaseBreak(a:line, a:lnum)
     let ind -= shiftwidth()
-  elseif s:IsDoThen(a:line, a:lnum) && !s:CsInd
+  elseif s:IsOpenBrace(a:line, a:lnum) && s:IsContinue(a:pline, a:pnum)
+    let ind = indent(s:SkipContinue(a:pline, a:pnum, a:lnum)) + shiftwidth()
+  elseif s:IsOpenBrace(a:line, a:lnum) || s:IsDoThen(a:line, a:lnum) && !s:CsInd
     let ind += shiftwidth()
   endif
   return ind
@@ -135,7 +136,7 @@ function s:CurrentLineIndent(cline, line, lnum, ind)
   elseif (a:cline =~# '^\s*\%(!\s\+\)\={' && !s:IsCloseBrace(a:cline, v:lnum)
         \ || a:cline =~# '^\s*\%(!\s*\)\=(' && !s:IsCloseParen(a:cline, v:lnum))
         \ && s:IsContinue(a:line, a:lnum)
-    call s:OvrdIndentKeys("},)")
+    call s:OvrdIndentKeys(a:cline =~# '^\s*\%(!\s\+\)\={' ? "}" : ")")
     let ind = indent(s:SkipContinue(a:line, a:lnum, v:lnum))
   endif
   if a:cline =~# '^\s*[defrt]' && ind < indent(v:lnum)
@@ -180,7 +181,9 @@ function s:SkipCommentLine(lnum, ...)
   else
     let line = a:1
   endif
-  while s:GetPrevNonBlank(lnum) && line =~# '^\s*#' && !s:IsHereDoc(s:PLnum, 1)
+  while s:GetPrevNonBlank(lnum)
+        \ && line =~# '^\s*#' && !s:IsHereDoc(s:PLnum, 1)
+        \ && !(line =~# '^\s*#.*'. s:noesc. '`' && s:IsSubSt(s:PLnum, 1))
     let lnum = s:PLnum
     let line = getline(lnum)
   endwhile
@@ -356,7 +359,8 @@ function s:CloseTailIndent(lnum, ind, item)
   endwhile
   let lnum = searchpair(pt1, "", pt2, "nbW", expr)
   if lnum > 0 && lnum != a:lnum && indent(lnum) < indent(a:lnum)
-    let ind = searchpair(pt1, "", pt2, "rmbW", expr, lnum) - 1
+    let ind = searchpair(pt1, "", pt2, "rmnbW", expr, lnum)
+          \ - searchpair(pt1, "", pt2, "mnbW", expr, lnum)
     let ind = s:IfStartInCaseLabel(lnum, ind)
     let ind = indent(lnum) + ind * shiftwidth() + s:CsInd
   endif
@@ -366,6 +370,7 @@ endfunction
 
 function s:IfStartInCaseLabel(lnum, sum)
   let [line, lnum] = s:SkipCommentLine(a:lnum)
+  let [line, lnum] = s:SkipContinue(line, lnum, a:lnum, 1)[0 : 1]
   return s:IsCase(line, lnum) || s:IsCaseBreak(line, lnum) ? a:sum + 1 : a:sum
 endfunction
 
@@ -536,7 +541,7 @@ function s:IsDoThen(l, n)
 endfunction
 
 function s:IsCaseParen(n, p)
-  let pt = '\%(\<case\>\|;&\|;;'
+  let pt = '\%(\<case\s.\{-}\sin\>\|;&\|;;'
         \. '\%(\s*esac\>\|\s*\%(#.*\)\=\n\%(\_^\s*\%(#.*\)\=\n\)*'
         \. '\_^\s*esac\>\)\@!\)'
         \. '\%("\%(\\\@<!\%(\\\\\)*\\"\|\_[^"]\)\{-}"\|'. "'\\_[^']*'"
@@ -603,7 +608,7 @@ function s:PtDic()
         \ }
 endfunction
 
-let s:front = '\%(\%(^\|;\)\s*\%(then\s\|do\s\|else\s\)\=\|)\|(\|`\)\s*'
+let s:front = '\%(\%(^\|;\)\s*\%(then\s\|do\s\|else\s\)\=\|)\|(\|`\|{\s\)\s*'
 let s:rear1 = '\%(\\\=$\|\s\|;\|&\||\|<\|>\|)\|}\|`\)'
 let s:rear2 = '\%(\\\=$\|\s\|(\)'
 let s:noesc = '\\\@<!\%(\\\\\)*'
