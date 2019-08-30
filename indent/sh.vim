@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Wed, 21 Aug 2019 09:32:42 +0900
-" Version:          5.10
+" Last Change:      Fri, 30 Aug 2019 19:07:21 +0900
+" Version:          5.11
 
 
 if exists("b:did_indent")
@@ -44,7 +44,7 @@ function GetShIndent()
   endif
   let cline = getline(v:lnum)
   let line = getline(lnum)
-  if s:IsQuote(lnum, line, 1)
+  if s:IsQuote(lnum, line, 1) && !s:IsTestQuoteTail(lnum, line)
     unlet! s:TbSum
     return indent(v:lnum)
   elseif s:IsHereDoc(lnum, line)
@@ -301,7 +301,7 @@ function s:CloseHeadParenIndent(line, ind)
   let ind = a:ind
   let expr = 's:IsInside(line("."),col("."))||s:IsCaseParen(line("."),col("."))'
   let pos = getpos(".")
-  if strpart(a:line, col(".") - 1, 1) ==# ")"
+  if a:line[col(".") - 1] ==# ")"
     call search('.\n\=)', "bW")
   else
     call cursor(0, 1)
@@ -543,10 +543,10 @@ endfunction
 function s:IsCaseParen(n, p)
   let pt = '\%(\<case\s.\{-}\sin\>\|;&\|;;'
         \. '\%(\s*esac\>\|\s*\%(#.*\)\=\n\%(\_^\s*\%(#.*\)\=\n\)*'
-        \. '\_^\s*esac\>\)\@!\)'
+        \. '\_^\s*esac\>\)\@!\)\%(\s*\%(#.*\)\=\n\%(\_^\s*\%(#.*\)\=\n\)*\)\='
         \. '\%("\%(\\\@<!\%(\\\\\)*\\"\|\_[^"]\)\{-}"\|'. "'\\_[^']*'"
-        \. '\|\\\@<!\%(\\\\\)*\\.\|#.*\_$'
-  if strpart(getline(a:n), a:p - 1, 1) ==# ")"
+        \. '\|\\\@<!\%(\\\\\)*\\.'
+  if getline(a:n)[a:p - 1] ==# ")"
     let pt .= '\|\_[^)]\)\+)'
   else
     let pt .= '\|\_[^()]\)\+('
@@ -556,6 +556,13 @@ function s:IsCaseParen(n, p)
   let cnum = col(".")
   call setpos(".", pos)
   return a:n == lnum && a:p == cnum
+endfunction
+
+function s:IsTestQuoteTail(n, l)
+  return (a:l =~# s:noesc. '"$' || a:l =~# "'[^']*'$")
+        \ && s:MatchSyntaxItem(a:n, a:l, s:testq, 0)
+        \ && (a:l =~# '^"$'
+        \ || s:MatchSyntaxItem(a:n, strlen(a:l) - 1, s:testq, 0))
 endfunction
 
 function s:NumOrStr(p)
@@ -613,8 +620,9 @@ let s:rear1 = '\%(\\\=$\|\s\|;\|&\||\|<\|>\|)\|}\|`\)'
 let s:rear2 = '\%(\\\=$\|\s\|(\)'
 let s:noesc = '\\\@<!\%(\\\\\)*'
 
-let s:noret = '\c'. 'string$\|\%(test.*\)\@<!.....quote$'
+let s:noret = '\c'. 'string$\|.....quote$'
 let s:quote = '\c'. 'string$\|...quote$'
+let s:testq = '\c'. 'test.*quote$'
 let s:hered = '\c'. 'heredoc$'
 let s:comnt = '\c'. 'comment$'
 let s:subst = '\c'. 'subst$\|commandsub'
