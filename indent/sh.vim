@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Fri, 30 Aug 2019 19:07:21 +0900
-" Version:          5.11
+" Last Change:      Sat, 31 Aug 2019 15:05:23 +0900
+" Version:          5.12
 
 
 if exists("b:did_indent")
@@ -559,7 +559,11 @@ function s:IsCaseParen(n, p)
 endfunction
 
 function s:IsTestQuoteTail(n, l)
-  return (a:l =~# s:noesc. '"$' || a:l =~# "'[^']*'$")
+  let sqpt = '\%(\\.\)*'. "'[^']*'$". '\|\%(\\.\)\+$'
+  return a:l =~# sqpt
+        \ && s:MatchSyntaxItem(a:n, a:l, s:testq, 0)
+        \ && !s:MatchSyntaxItem(a:n, match(a:l, sqpt), s:testq, 0)
+        \ || a:l =~# s:noesc. '"$'
         \ && s:MatchSyntaxItem(a:n, a:l, s:testq, 0)
         \ && (a:l =~# '^"$'
         \ || s:MatchSyntaxItem(a:n, strlen(a:l) - 1, s:testq, 0))
