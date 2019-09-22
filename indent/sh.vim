@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Sat, 21 Sep 2019 15:16:48 +0900
-" Version:          5.14
+" Last Change:      Sun, 22 Sep 2019 19:24:37 +0900
+" Version:          5.15
 
 
 if exists("b:did_indent")
@@ -12,7 +12,7 @@ let b:did_indent = 1
 
 setlocal indentexpr=GetShIndent()
 setlocal indentkeys+=0=then,0=do,0=elif,0=fi,0=esac,0=done
-setlocal indentkeys+=0=read,0=end,0),0<!>,0(,0-
+setlocal indentkeys+=0=read,0=end,0),0(,0=\&\&,0<Bar>
 setlocal indentkeys-=:,0#
 
 let b:undo_indent = 'setlocal indentexpr< indentkeys<'
@@ -91,10 +91,6 @@ function s:PrevLineIndent(line, lnum, pline, pnum)
   elseif s:IsBackSlash(a:line, a:lnum) && a:lnum != v:lnum - 1
         \ && !s:IsContinue(a:line, a:lnum)
     let ind = s:BaseLevelIndent(a:line, a:lnum, v:lnum, ind)
-  elseif s:IsBackSlash(a:line, a:lnum) && !s:IsContinue(a:line, a:lnum)
-        \ && !s:IsHeadContinue(a:line)
-        \ && ind - shiftwidth() > s:BaseLevelIndent(a:pline,a:pnum,a:lnum, ind)
-    call s:OvrdIndentKeys('\&,<Bar>')
   elseif (s:IsTailBar(a:line, a:lnum) && !s:IsBackSlash(a:line, a:lnum)
         \ || s:IsContinue(a:line, a:lnum)
         \ && ind - shiftwidth() > s:BaseLevelIndent(a:pline,a:pnum,a:lnum, ind))
@@ -122,6 +118,8 @@ function s:PrevLineIndent(line, lnum, pline, pnum)
     let ind = indent(s:SkipContinue(a:pline, a:pnum, a:lnum)) + shiftwidth()
   elseif s:IsOpenBrace(a:line, a:lnum) || s:IsDoThen(a:line, a:lnum) && !s:CsInd
     let ind += shiftwidth()
+  elseif s:IsContinue(a:line, a:lnum)
+    call s:OvrdIndentKeys("{,(")
   endif
   return ind
 endfunction
@@ -140,7 +138,7 @@ function s:CurrentLineIndent(cline, line, lnum, pline, pnum, ind)
     let ind -= shiftwidth()
   elseif a:cline =~# '^\s*)'
     let ind = s:CloseHeadParenIndent(a:cline, ind)
-  elseif a:cline =~# '^\s*-' && ind == indent(a:lnum)
+  elseif !s:IsHeadContinue(a:cline) && ind == indent(a:lnum)
         \ && s:IsBackSlash(a:line, a:lnum) && !s:IsContinue(a:line, a:lnum)
         \ && (s:IsHeadContinue(a:line) || s:IsContinue(a:pline, a:pnum))
         \ && ind - shiftwidth() == s:BaseLevelIndent(a:line,a:lnum,v:lnum, ind)
@@ -149,12 +147,9 @@ function s:CurrentLineIndent(cline, line, lnum, pline, pnum, ind)
         \ && s:IsBackSlash(a:line, a:lnum) && !s:IsContinue(a:line, a:lnum)
         \ && ind - shiftwidth() > s:BaseLevelIndent(a:line, a:lnum, v:lnum, ind)
     let ind = indent(s:SkipContinue(a:line, a:lnum, v:lnum)) + shiftwidth()
-  elseif a:cline =~# '^\s*!$' && s:IsContinue(a:line, a:lnum)
-    call s:OvrdIndentKeys("{,(")
-  elseif (a:cline =~# '^\s*\%(!\s\+\)\={' && !s:IsCloseBrace(a:cline, v:lnum)
-        \ || a:cline =~# '^\s*\%(!\s*\)\=(' && !s:IsCloseParen(a:cline, v:lnum))
+  elseif (s:IsOpenBrace(a:cline, v:lnum) || s:IsOpenParen(a:cline, v:lnum))
         \ && s:IsContinue(a:line, a:lnum)
-    call s:OvrdIndentKeys(a:cline =~# '^\s*\%(!\s\+\)\={' ? "}" : ")")
+    call s:OvrdIndentKeys("*<CR>")
     let ind = indent(s:SkipContinue(a:line, a:lnum, v:lnum))
   endif
   if a:cline =~# '^\s*[defrt]' && ind < indent(v:lnum)
@@ -361,6 +356,7 @@ endfunction
 function s:CloseTailBraceIndent(lnum, ind)
   let item = [
         \ '\<\%(if\|elif\|while\|until\)\s\+\%(!\s\+\)\=\zs{'
+        \. '\|\<function\s\+\S\+\s\+\zs{'
         \. '\|\%({\s\+\)\@<={\|\%(&&\|||\=\)\s*\%(!\s\)\=\s*\zs{'
         \. '\|'. s:front. '\%(!\s\)\=\s*\zs{',
         \ '\%(}\s\+\)\@<=}\|\%(^\|;\s*\%(done\|fi\|esac\)\=\)\s*\zs}',
@@ -490,7 +486,9 @@ function s:GetPrevNonBlank(lnum)
 endfunction
 
 function s:OvrdIndentKeys(...)
-  let b:sh_indent_indentkeys = &indentkeys
+  if !exists("b:sh_indent_indentkeys")
+    let b:sh_indent_indentkeys = &indentkeys
+  endif
   if a:0
     exec 'setlocal indentkeys+='. a:1
   else
@@ -534,10 +532,6 @@ endfunction
 function s:IsCloseBrace(l, n)
   let pt = '\%(}\s\+\)\@<=}\|;\s*\%(done\|fi\|esac\)\=\s*\zs}'
   return s:IsOutside(a:l, a:n, pt)
-endfunction
-
-function s:IsCloseParen(l, n)
-  return s:IsOutside(a:l, a:n, '\%(^\s*\)\@<!))\@!')
 endfunction
 
 function s:IsCloseDoubleParen(l, n)
