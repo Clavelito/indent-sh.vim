@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Sun, 22 Sep 2019 19:24:37 +0900
-" Version:          5.15
+" Last Change:      Mon, 23 Sep 2019 13:39:22 +0900
+" Version:          5.16
 
 
 if exists("b:did_indent")
@@ -91,9 +91,8 @@ function s:PrevLineIndent(line, lnum, pline, pnum)
   elseif s:IsBackSlash(a:line, a:lnum) && a:lnum != v:lnum - 1
         \ && !s:IsContinue(a:line, a:lnum)
     let ind = s:BaseLevelIndent(a:line, a:lnum, v:lnum, ind)
-  elseif (s:IsTailBar(a:line, a:lnum) && !s:IsBackSlash(a:line, a:lnum)
-        \ || s:IsContinue(a:line, a:lnum)
-        \ && ind - shiftwidth() > s:BaseLevelIndent(a:pline,a:pnum,a:lnum, ind))
+  elseif s:IsContinue(a:line, a:lnum) && !s:IsBackSlash(a:line, a:lnum)
+        \ && !s:IsHeadContinue(a:line, a:lnum) && a:pnum == a:lnum - 1
         \ && s:IsBackSlash(a:pline, a:pnum) && !s:IsContinue(a:pline, a:pnum)
     let ind = s:BackSlashIndent(a:pline, a:pnum)
   elseif a:line =~# '\$(\|`' && s:IsSubSt(v:lnum, 1)
@@ -138,12 +137,14 @@ function s:CurrentLineIndent(cline, line, lnum, pline, pnum, ind)
     let ind -= shiftwidth()
   elseif a:cline =~# '^\s*)'
     let ind = s:CloseHeadParenIndent(a:cline, ind)
-  elseif !s:IsHeadContinue(a:cline) && ind == indent(a:lnum)
+  elseif !s:IsHeadContinue(a:cline, v:lnum)
+        \ && a:lnum == v:lnum - 1 && ind == indent(a:lnum)
         \ && s:IsBackSlash(a:line, a:lnum) && !s:IsContinue(a:line, a:lnum)
-        \ && (s:IsHeadContinue(a:line) || s:IsContinue(a:pline, a:pnum))
+        \ && (s:IsHeadContinue(a:line, a:lnum) || s:IsContinue(a:pline, a:pnum))
         \ && ind - shiftwidth() == s:BaseLevelIndent(a:line,a:lnum,v:lnum, ind)
     let ind += shiftwidth()
-  elseif s:IsHeadContinue(a:cline) && !s:IsHeadContinue(a:line)
+  elseif s:IsHeadContinue(a:cline, v:lnum)
+        \ && a:lnum == v:lnum - 1 && !s:IsHeadContinue(a:line, a:lnum)
         \ && s:IsBackSlash(a:line, a:lnum) && !s:IsContinue(a:line, a:lnum)
         \ && ind - shiftwidth() > s:BaseLevelIndent(a:line, a:lnum, v:lnum, ind)
     let ind = indent(s:SkipContinue(a:line, a:lnum, v:lnum)) + shiftwidth()
@@ -242,6 +243,10 @@ function s:BackSlashIndent(line, lnum)
   let line = a:line
   let lnum = a:lnum
   while lnum && s:IsBackSlash(line, lnum) && !s:IsContinue(line, lnum)
+    if s:IsHeadContinue(line, lnum)
+      let lnum -= 1
+      break
+    endif
     let lnum -= 1
     let line = getline(lnum)
   endwhile
@@ -561,8 +566,9 @@ function s:IsTailBar(l, n)
   return s:IsOutside(a:l, a:n, pt)
 endfunction
 
-function s:IsHeadContinue(l)
-  return a:l =~# '^\s*\%(&&\|||\=\)'
+function s:IsHeadContinue(l, n)
+  let pt = '^\s*\%(&&\|||\=\)'
+  return s:IsOutside(a:l, a:n, pt)
 endfunction
 
 function s:IsContinue(l, n)
