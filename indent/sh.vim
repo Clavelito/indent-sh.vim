@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Mon, 23 Sep 2019 13:39:22 +0900
-" Version:          5.16
+" Last Change:      Thu, 26 Sep 2019 17:33:04 +0900
+" Version:          5.17
 
 
 if exists("b:did_indent")
@@ -64,16 +64,15 @@ endfunction
 
 function s:PrevLineIndent(line, lnum, pline, pnum)
   let ind = indent(a:lnum)
-  if s:IsBackSlash(a:pline, a:pnum) && s:IsBackSlash(a:line, a:lnum)
-        \ || (s:IsCase(a:pline, a:pnum) || s:IsCaseBreak(a:pline, a:pnum))
-        \ && !s:IsEsac(a:line)
-    let s:CsInd = 0
+  let s:CsInd = 0
+  if s:IsInsideCaseLabel(a:pline, a:pnum, a:line, a:lnum)
+  elseif !s:IsHereDoc(a:lnum, 1) && s:IsHereDoc(a:pnum, 1)
+    let ind = s:ContinueLineIndent(a:line, a:lnum, s:hered)
   else
     let ind = s:ControlStatementIndent(a:line, a:lnum, ind)
   endif
-  if !s:IsHereDoc(a:lnum, 1) && s:IsHereDoc(a:pnum, 1)
-    let ind = s:ContinueLineIndent(a:line, a:lnum, s:hered)
-  elseif s:IsCase(a:pline, a:pnum) || s:IsCaseBreak(a:pline, a:pnum)
+  if s:IsCase(a:pline, a:pnum)
+        \ || s:IsCaseBreak(a:pline, a:pnum) && !s:IsEsac(a:line)
     let ind = s:CaseLabelIndent(a:line, a:lnum, ind)
   elseif a:line =~# ')\|`' && s:IsSubSt(a:lnum, 1) && !s:IsSubSt(v:lnum, 1)
         \ && !s:IsBackSlash(a:line, a:lnum)
@@ -125,7 +124,8 @@ endfunction
 
 function s:CurrentLineIndent(cline, line, lnum, pline, pnum, ind)
   let ind = a:ind
-  if s:IsEsac(a:cline) && !s:IsCaseBreak(a:line, a:lnum)
+  if s:IsInsideCaseLabel(a:line, a:lnum, a:cline, v:lnum)
+  elseif s:IsEsac(a:cline) && !s:IsCaseBreak(a:line, a:lnum)
     let ind -= g:sh_indent_case_labels ? shiftwidth() * 2 : shiftwidth()
   elseif s:IsEsac(a:cline) && g:sh_indent_case_labels
         \ || a:cline =~# '^\s*\%(fi\|done\)\>'. s:rear1
@@ -256,14 +256,14 @@ endfunction
 function s:CaseLabelIndent(line, lnum, ind)
   let ind = a:ind
   if !s:IsBackSlash(a:line, a:lnum) && !s:IsEsac(a:line)
-    let ind += shiftwidth()
     let pos = s:IsOutside(a:line, a:lnum, s:noesc. ")")
+    let ind += pos ? shiftwidth() : 0
     let line = strpart(a:line, pos)
     while pos
       let line = " ". line
       let pos -= 1
     endwhile
-    let ind = s:ControlStatementIndent(line, a:lnum, ind)
+    let ind = ind != a:ind ? s:ControlStatementIndent(line, a:lnum, ind) : ind
   endif
   return ind
 endfunction
@@ -310,8 +310,14 @@ function s:ContinueLineIndent(line, lnum, ...)
   if s:SubstCount(onum, 1) < s:SubstCount(v:lnum, 1)
     let ind += shiftwidth() * (s:SubstCount(v:lnum, 1) - s:SubstCount(onum, 1))
   endif
-  if (s:IsCase(line, lnum) || s:IsCaseBreak(line, lnum)) && !s:IsEsac(oline)
-    let ind = s:CaseLabelIndent(a:line, a:lnum, ind)
+  if s:IsCase(line, lnum) || s:IsCaseBreak(line, lnum) && !s:IsEsac(oline)
+    if s:IsCaseLabel(onum, ind) && !s:IsBackSlash(oline, onum)
+      let ind = s:CaseLabelIndent(oline, onum, ind)
+    elseif s:IsCaseLabel(a:lnum, ind) && !s:IsBackSlash(a:line, a:lnum)
+      let ind = s:CaseLabelIndent(a:line, a:lnum, ind)
+    elseif !s:IsBackSlash(a:line, a:lnum) && !s:IsEsac(a:line)
+      let ind += shiftwidth()
+    endif
   elseif !s:IsCase(line, lnum) && !s:IsCaseBreak(line, lnum)
         \ && s:IsBackSlash(a:line, a:lnum)
     let ind += shiftwidth()
@@ -501,6 +507,13 @@ function s:OvrdIndentKeys(...)
     setlocal indentkeys+=A,B,C,D,E,F,G,H,I,J,K,L,M,N,<O>,P,Q,R,S,T,U,V,W,X,Y,Z
     setlocal indentkeys+=1,2,3,4,5,6,7,8,9,<0>,_,-,=,+,.
   endif
+endfunction
+
+function s:IsInsideCaseLabel(line, lnum, cline, clnum)
+  return s:IsCase(a:line, a:lnum)
+        \ || s:IsCaseBreak(a:line, a:lnum) && !s:IsEsac(a:cline)
+        \ || s:IsBackSlash(a:line, a:lnum) && a:lnum == a:clnum - 1
+        \ && s:IsTailBar(a:line, a:lnum) && s:IfStartInCaseLabel(a:lnum, 0)
 endfunction
 
 function s:IsOutside(l, n, pt)
