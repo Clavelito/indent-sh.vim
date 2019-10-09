@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Thu, 26 Sep 2019 17:33:04 +0900
-" Version:          5.17
+" Last Change:      Wed, 09 Oct 2019 18:47:44 +0900
+" Version:          5.18
 
 
 if exists("b:did_indent")
@@ -16,6 +16,7 @@ setlocal indentkeys+=0=read,0=end,0),0(,0=\&\&,0<Bar>
 setlocal indentkeys-=:,0#
 
 let b:undo_indent = 'setlocal indentexpr< indentkeys<'
+      \. '| unlet! b:sh_indent_tabstop b:sh_indent_indentkeys b:sh_indent_synhi'
 
 if !exists("g:sh_indent_case_labels")
   let g:sh_indent_case_labels = 1
@@ -37,6 +38,9 @@ function GetShIndent()
     let &indentkeys = b:sh_indent_indentkeys
     unlet b:sh_indent_indentkeys
   endif
+  if s:IsFtZsh() && !exists("b:sh_indent_synhi") && exists("b:current_syntax")
+    call s:SetZshSubstString()
+  endif
   let lnum = prevnonblank(v:lnum - 1)
   if lnum == 0
     unlet! s:TbSum
@@ -57,17 +61,17 @@ function GetShIndent()
   endif
   let [line, lnum] = s:SkipCommentLine(lnum, line)
   let [pline, pnum] = s:SkipCommentLine(lnum)
-  let ind = s:PrevLineIndent(line, lnum, pline, pnum)
+  let ind = s:PrevLineIndent(cline, line, lnum, pline, pnum)
   let ind = s:CurrentLineIndent(cline, line, lnum, pline, pnum, ind)
   return ind
 endfunction
 
-function s:PrevLineIndent(line, lnum, pline, pnum)
+function s:PrevLineIndent(cline, line, lnum, pline, pnum)
   let ind = indent(a:lnum)
   let s:CsInd = 0
-  if s:IsInsideCaseLabel(a:pline, a:pnum, a:line, a:lnum)
-  elseif !s:IsHereDoc(a:lnum, 1) && s:IsHereDoc(a:pnum, 1)
-    let ind = s:ContinueLineIndent(a:line, a:lnum, s:hered)
+  if !s:IsHereDoc(a:lnum, 1) && s:IsHereDoc(a:pnum, 1)
+    return s:ContinueLineIndent(a:line, a:lnum, s:hered)
+  elseif s:IsInsideCaseLabel(a:pline, a:pnum, a:line, a:lnum)
   else
     let ind = s:ControlStatementIndent(a:line, a:lnum, ind)
   endif
@@ -77,7 +81,7 @@ function s:PrevLineIndent(line, lnum, pline, pnum)
   elseif a:line =~# ')\|`' && s:IsSubSt(a:lnum, 1) && !s:IsSubSt(v:lnum, 1)
         \ && !s:IsBackSlash(a:line, a:lnum)
     let ind = s:ContinueLineIndent(a:line, a:lnum, s:subst)
-  elseif a:line =~# '"\|\%o47' && s:IsQuote(a:pnum, a:pline)
+  elseif a:line =~# '"\|\%o47\|}' && s:IsQuote(a:pnum, a:pline)
     let ind = s:ContinueLineIndent(a:line, a:lnum, s:quote)
   elseif a:line =~# ')\|`' && s:IsSubSt(v:lnum, 1)
         \ && s:SubstCount(a:lnum, 1) > s:SubstCount(v:lnum, 1)
@@ -97,8 +101,6 @@ function s:PrevLineIndent(line, lnum, pline, pnum)
   elseif a:line =~# '\$(\|`' && s:IsSubSt(v:lnum, 1)
         \ && s:SubstCount(a:lnum, 1) < s:SubstCount(a:lnum, a:line)
     let ind = s:OpenSubStIndent(a:pline, a:pnum, a:lnum, ind)
-  elseif s:IsOpenParen(a:line, a:lnum)
-    let ind = indent(s:SkipContinue(a:pline, a:pnum, a:lnum)) + shiftwidth()
   elseif !s:IsContinue(a:line, a:lnum) && !s:IsBackSlash(a:line, a:lnum)
         \ && (s:IsContinue(a:pline, a:pnum) || s:IsBackSlash(a:pline, a:pnum))
     let ind = s:ContinueLineIndent(a:line, a:lnum, a:pline, a:pnum)
@@ -106,17 +108,24 @@ function s:PrevLineIndent(line, lnum, pline, pnum)
   if s:IsCloseBrace(a:line, a:lnum)
         \ && !s:IsBackSlash(a:line, a:lnum) && !s:IsContinue(a:line, a:lnum)
     let ind = s:CloseTailBraceIndent(a:lnum, ind)
-  elseif s:IsCloseDoubleParen(a:line, a:lnum) && !s:IsFtZsh()
-        \ && !s:IsBackSlash(a:line, a:lnum) && !s:IsContinue(a:line, a:lnum)
-    let ind = s:CloseTailParenIndent(a:lnum, ind)
+  elseif s:IsCloseParen(a:line, a:lnum) && !s:CsInd
+        \ && !s:IsCase(a:pline, a:pnum) && !s:IsCaseBreak(a:pline, a:pnum)
+        \ && s:SubstCount(a:lnum, 1) == s:SubstCount(v:lnum, 1)
+        \ && !s:IsCaseParen(a:lnum, s:IsCloseParen(a:line, a:lnum))
+    let ind = s:CloseParenIndent(a:line, ind
+          \, a:lnum, s:IsCloseParen(a:line, a:lnum))
   endif
   if s:IsCaseBreak(a:line, a:lnum)
     let ind -= shiftwidth()
-  elseif s:IsOpenBrace(a:line, a:lnum) && s:IsContinue(a:pline, a:pnum)
+  elseif s:IsDoubleParen(a:pline) && s:IsDoThen(a:line, a:lnum)
+    let ind = s:DoubleParenIndent(a:pline, a:pnum, ind) + shiftwidth()
+  elseif (s:IsContinue(a:pline, a:pnum) || s:IsHeadContinue(a:line, a:lnum))
+        \ && (s:IsOpenBrace(a:line, a:lnum) || s:IsOpenParen(a:line, a:lnum))
     let ind = indent(s:SkipContinue(a:pline, a:pnum, a:lnum)) + shiftwidth()
-  elseif s:IsOpenBrace(a:line, a:lnum) || s:IsDoThen(a:line, a:lnum) && !s:CsInd
+  elseif (s:IsOpenBrace(a:line,a:lnum) || s:IsDoThen(a:line,a:lnum)) && !s:CsInd
+        \ || s:IsOpenParen(a:line, a:lnum) && !s:IsBackSlash(a:line, a:lnum)
     let ind += shiftwidth()
-  elseif s:IsContinue(a:line, a:lnum)
+  elseif s:IsContinue(a:line, a:lnum) || s:IsHeadContinue(a:cline, v:lnum)
     call s:OvrdIndentKeys("{,(")
   endif
   return ind
@@ -136,7 +145,9 @@ function s:CurrentLineIndent(cline, line, lnum, pline, pnum, ind)
         \ || a:cline =~# '^\s*}'
     let ind -= shiftwidth()
   elseif a:cline =~# '^\s*)'
-    let ind = s:CloseHeadParenIndent(a:cline, ind)
+    let ind = s:CloseParenIndent(a:cline, ind)
+  elseif a:cline =~# '^\s*\%(then\|do\)\>'. s:rear2 && s:IsDoubleParen(a:line)
+    let ind = s:DoubleParenIndent(a:line, a:lnum, ind)
   elseif !s:IsHeadContinue(a:cline, v:lnum)
         \ && a:lnum == v:lnum - 1 && ind == indent(a:lnum)
         \ && s:IsBackSlash(a:line, a:lnum) && !s:IsContinue(a:line, a:lnum)
@@ -148,8 +159,9 @@ function s:CurrentLineIndent(cline, line, lnum, pline, pnum, ind)
         \ && s:IsBackSlash(a:line, a:lnum) && !s:IsContinue(a:line, a:lnum)
         \ && ind - shiftwidth() > s:BaseLevelIndent(a:line, a:lnum, v:lnum, ind)
     let ind = indent(s:SkipContinue(a:line, a:lnum, v:lnum)) + shiftwidth()
-  elseif (s:IsOpenBrace(a:cline, v:lnum) || s:IsOpenParen(a:cline, v:lnum))
-        \ && s:IsContinue(a:line, a:lnum)
+  elseif (s:IsHeadContinue(a:cline, v:lnum) || s:IsContinue(a:line, a:lnum))
+        \ && !s:IsBackSlash(a:cline, v:lnum) && !s:IsContinue(a:cline, v:lnum)
+        \ && (s:IsOpenBrace(a:cline, v:lnum) || s:IsOpenParen(a:cline, v:lnum))
     call s:OvrdIndentKeys("*<CR>")
     let ind = indent(s:SkipContinue(a:line, a:lnum, v:lnum))
   endif
@@ -168,6 +180,7 @@ function s:ControlStatementIndent(line, lnum, ind)
     let ind += shiftwidth()
   endif
   if a:line =~# '^\s*elif\>\%(.*;\s*fi\>\)\@!'
+        \ || a:line =~# '^\s*}\s*\%(elif\|else\|always\)\>' && s:IsFtZsh()
     let ind += shiftwidth()
   elseif max(map(keys(ptdic), 'a:line =~# v:val'))
     for key in keys(ptdic)
@@ -253,6 +266,15 @@ function s:BackSlashIndent(line, lnum)
   return indent(lnum + 1)
 endfunction
 
+function s:DoubleParenIndent(line, lnum, ind)
+  let line = a:line
+  let lnum = a:lnum
+  while lnum && line =~# '^\s*((.\{-}))\s*\%(#.*\)\=$'
+    let [line, lnum] = s:SkipCommentLine(lnum)
+  endwhile
+  return line =~# '^\s*\%(if\|elif\|while\|until\)\>' ? indent(lnum) : a:ind
+endfunction
+
 function s:CaseLabelIndent(line, lnum, ind)
   let ind = a:ind
   if !s:IsBackSlash(a:line, a:lnum) && !s:IsEsac(a:line)
@@ -323,8 +345,9 @@ function s:ContinueLineIndent(line, lnum, ...)
     let ind += shiftwidth()
   elseif oline =~# '^\t\+[ ]\+.*<<-' && !&expandtab && s:IsHereDoc(onum, oline)
     let ind = matchend(oline, '\t*', 0) * &tabstop
-  elseif oline =~# '^\s*\%(if\|elif\|while\|until\)\>'
-        \ || oline =~# '^\s*foreach\>' && s:IsFtZsh()
+  elseif (oline =~# '^\s*\%(if\|elif\|while\|until\|do\|then\|else\)\>'
+        \ || (oline =~# '^\s*foreach\>' || oline =~# '^\s*}\s*elif\>')
+        \ && s:IsFtZsh()) && !s:CsInd
     let ind = s:ControlStatementIndent(oline, onum, ind)
   elseif s:CsInd
     let ind += s:CsInd
@@ -332,19 +355,23 @@ function s:ContinueLineIndent(line, lnum, ...)
   return ind
 endfunction
 
-function s:CloseHeadParenIndent(line, ind)
+function s:CloseParenIndent(line, ind, ...)
   let ind = a:ind
   let expr = 's:IsInside(line("."),col("."))||s:IsCaseParen(line("."),col("."))'
   let pos = getpos(".")
-  if a:line[col(".") - 1] ==# ")"
+  let snum = v:lnum
+  if a:0
+    call cursor(a:1, a:2)
+    let snum = a:1
+  elseif a:line[col(".") - 1] ==# ")"
     call search('.\n\=)', "bW")
   else
     call cursor(0, 1)
   endif
   let s:root = s:IsSubSt(line("."), col("."))
-  let lnum = searchpair(s:noesc. "(", "", s:noesc. ")", "bW", expr)
+  let lnum = searchpair(s:noesc. '\zs(', "", s:noesc. '\zs)', "bW", expr)
   unlet s:root
-  if lnum > 0
+  if lnum > 0 && snum != lnum
     let sum = 0
     let lcol = col(".")
     while search(s:noesc. '(\%(\s*)\)\@!', "bW", lnum)
@@ -354,7 +381,9 @@ function s:CloseHeadParenIndent(line, ind)
         let lcol = 0
       else
         let lcol = col(".")
-        let sum += 1
+        let enum = searchpair(s:noesc.'\zs(', "", s:noesc.'\zs)',"W",expr,lnum)
+        call cursor(lnum, lcol)
+        let sum += lnum != enum ? 1 : 0
       endif
     endwhile
     let sum = s:IfStartInCaseLabel(lnum, sum)
@@ -367,16 +396,15 @@ endfunction
 function s:CloseTailBraceIndent(lnum, ind)
   let item = [
         \ '\<\%(if\|elif\|while\|until\)\s\+\%(!\s\+\)\=\zs{'
-        \. '\|\<function\s\+\S\+\s\+\zs{'
+        \. '\|\<function\%(\s\+\S\+\)\=\s\+\zs{\|\%(always\|else\|\]\]\)\s*\zs{'
         \. '\|\%({\s\+\)\@<={\|\%(&&\|||\=\)\s*\%(!\s\)\=\s*\zs{'
         \. '\|'. s:front. '\%(!\s\)\=\s*\zs{',
-        \ '\%(}\s\+\)\@<=}\|\%(^\|;\s*\%(done\|fi\|esac\)\=\)\s*\zs}',
-        \ '\%(}\s\+\)\@<=}\|;\s*\%(done\|fi\|esac\)\=\s*\zs}' ]
-  return s:CloseTailIndent(a:lnum, a:ind, item)
-endfunction
-
-function s:CloseTailParenIndent(lnum, ind)
-  let item = [ '((', '))', '\%(^\s*\)\@<!))' ]
+        \ '\%(}\s\+\)\@<=}\|\%(^\|;[;&|]\=\s*\%(done\|fi\|esac\)\=\)\s*\zs}',
+        \ '\%(}\s\+\)\@<=}\|;[;&|]\=\s*\%(done\|fi\|esac\)\=\s*\zs}' ]
+  if s:IsFtZsh() && s:CsInd > 0
+    let item[1] .= '\|'. s:noesc. '\zs}\ze\s*\%(#.*\)\=$'
+    let item[2] .= '\|'. s:noesc. '\zs}\ze\s*\%(#.*\)\=$'
+  endif
   return s:CloseTailIndent(a:lnum, a:ind, item)
 endfunction
 
@@ -402,6 +430,9 @@ function s:CloseTailIndent(lnum, ind, item)
     let ind -= searchpair(pt1, "", pt2, "mbW", expr, lnum)
     let ind = s:IfStartInCaseLabel(lnum, ind)
     let ind = indent(lnum) + ind * shiftwidth() + s:CsInd
+  elseif lnum == a:lnum && s:CsInd > 0
+        \ && getline(lnum)[0 : col(".") - 1] =~# '\%(;\|))\=\|\]\]\)\s*{$'
+    let ind -= s:CsInd
   endif
   call setpos(".", pos)
   return ind
@@ -537,32 +568,72 @@ endfunction
 
 function s:IsOpenBrace(l, n)
   let pt = '\%(^\|;\|&&\|||\=\)\s*\%(!\s\)\=\s*{\ze\s*\%(#.*\)\=$'
-        \. '\|^\s*\%(\h\w*\|\S\+\)\s*()\s*{\ze\s*\%(#.*\)\=$'
-        \. '\|^\s*function\s\+\S\+\%(\s*()\)\=\s*{\ze\s*\%(#.*\)\=$'
+        \.'\|\%(^\|&&\|||\)\s*\%(\h\w*\|\S\+\)\=\s*()\s*{\ze\s*\%(#.*\)\=$'
+        \.'\|\%(^\|&&\|||\)\s*function\s\+\S\+\%(\s*()\)\=\s*{\ze\s*\%(#.*\)\=$'
+        \.'\|\%(^\|&&\|||\)\s*function\%(\s*()\)\=\s*{\ze\s*\%(#.*\)\=$'
   return s:IsOutside(a:l, a:n, pt)
 endfunction
 
 function s:IsOpenParen(l, n)
-  let pt = s:noesc. '(\ze\s*\%(#.*\)\=$'
-  return s:IsOutside(a:l, a:n, pt)
+  if a:l !~# '()\@!'
+    return 0
+  endif
+  let pt1 = s:noesc. '('
+  let coln = s:IsOutside(a:l, a:n, pt1)
+  if !coln || coln && a:l =~# '^\s*((\@!\|\<case\>' && s:IsCaseParen(a:n, coln)
+    return 0
+  endif
+  let snum = s:SubstCount(a:n, coln)
+  if snum > s:SubstCount(a:n, 1)
+    return 0
+  endif
+  let expr = 's:IsInside(a:n,col("."))'
+  let pos = getpos(".")
+  call cursor(a:n, coln)
+  let s:root = s:IsSubSt(a:n, col("."))
+  let lnum = searchpair(s:noesc. '\zs(', "", s:noesc. '\zs)', "W", expr, a:n)
+  unlet s:root
+  if lnum != a:n
+    call setpos(".", pos)
+    return 1
+  endif
+  while search(s:noesc. '\zs(', "W", a:n)
+    if eval(expr) || snum < s:SubstCount(a:n, col("."))
+      continue
+    else
+      let snum = s:SubstCount(a:n, col("."))
+      let s:root = s:IsSubSt(a:n, col("."))
+      let lnum = searchpair(s:noesc.'\zs(', "", s:noesc.'\zs)', "W", expr, a:n)
+      unlet s:root
+      if lnum != a:n
+        call setpos(".", pos)
+        return 1
+      endif
+    endif
+  endwhile
+  call setpos(".", pos)
+  return 0
 endfunction
 
 function s:IsCloseBrace(l, n)
-  let pt = '\%(}\s\+\)\@<=}\|;\s*\%(done\|fi\|esac\)\=\s*\zs}'
+  let pt = '\%(}\s\+\)\@<=}\|;[;&|]\=\s*\%(done\|fi\|esac\)\=\s*\zs}'
+  if s:IsFtZsh() && s:CsInd > 0
+    let pt .= '\|'. s:noesc. '}\ze\s*\%(#.*\)\=$'
+  endif
   return s:IsOutside(a:l, a:n, pt)
 endfunction
 
-function s:IsCloseDoubleParen(l, n)
-  return s:IsOutside(a:l, a:n, '\%(^\s*\)\@<!))')
+function s:IsCloseParen(l, n)
+  return s:IsOutside(a:l, a:n, s:noesc. ')\ze\s*\%(#.*\)\=$')
 endfunction
 
 function s:IsCase(l, n)
-  let pt = s:front. '\<case\>\%(.*;;\s*\<esac\>\)\@!'
+  let pt = s:front. '\<case\>\%(.*;[;&|]\s*\<esac\>\)\@!'
   return s:IsOutside(a:l, a:n, pt)
 endfunction
 
 function s:IsCaseBreak(l, n)
-  let pt = ';[;&]\%(.*\<esac\>\)\@!'
+  let pt = ';[;&|]\%(.*\<esac\>\)\@!'
   return s:IsOutside(a:l, a:n, pt)
 endfunction
 
@@ -575,7 +646,7 @@ function s:IsBackSlash(l, n)
 endfunction
 
 function s:IsTailBar(l, n)
-  let pt = '|\@<!|\ze\s*\%(#.*\|\\\)\=$'
+  let pt = '[;|]\@1<!|\ze\s*\%(#.*\|\\\)\=$'
   return s:IsOutside(a:l, a:n, pt)
 endfunction
 
@@ -584,9 +655,13 @@ function s:IsHeadContinue(l, n)
   return s:IsOutside(a:l, a:n, pt)
 endfunction
 
+function s:IsDoubleParen(l)
+  return a:l =~# '^\s*\%(if\|elif\|while\|until\)\=\s*((.\{-}))\s*\%(#.*\)\=$'
+endfunction
+
 function s:IsContinue(l, n)
-  let pt1 = '.\ze\%(&&\|||\=\)\s*\%(#.*\|\\\)\=$'
-  let pt2 = '^\s*\%(if\|elif\|while\|until\)\>\s*\%(#.*\|\\\)\=$'
+  let pt1 = '.\ze\%(&&\|||\|[;|]\@1<!|\)\s*\%(#.*\|\\\)\=$'
+  let pt2 = '^\s*\%(if\|elif\|while\|until\)\>\s*\%(\s\h\w*=.*\|\s#.*\|\\\)\=$'
   return s:IsOutside(a:l, a:n, pt1) || a:l =~# pt2
 endfunction
 
@@ -599,15 +674,14 @@ function s:IsDoThen(l, n)
 endfunction
 
 function s:IsCaseParen(n, p)
-  let pt = '\%(\<case\s.\{-}\sin\>\%(\s*$\|\s\)\|;&\|;;'
+  let pt = '\%(\<case\s.\{-}\sin\>\%(\s*$\|\s\|(\)\|;[;&|]'
         \. '\%(\s*esac\>\|\s*\%(#.*\)\=\n\%(\_^\s*\%(#.*\)\=\n\)*'
         \. '\_^\s*esac\>\)\@!\)\%(\s*\%(#.*\)\=\n\%(\_^\s*\%(#.*\)\=\n\)*\)\='
-        \. '\%("\%(\\\@<!\%(\\\\\)*\\"\|\_[^"]\)\{-}"\|'. "'\\_[^']*'"
-        \. '\|\\\@<!\%(\\\\\)*\\.'
   if getline(a:n)[a:p - 1] ==# ")"
-    let pt .= '\|\_[^)]\)\+)'
+    let pt .= '\%("\%(\\\@1<!\%(\\\\\)*\\"\|\_[^"]\)\{-}"\|'. "'\\_[^']*'"
+          \. '\|\\\@1<!\%(\\\\\)*\\.\|\_[^)]\)\+)'
   else
-    let pt .= '\|\_[^()]\)\+('
+    let pt .= '\_[^()]*(\|\<case\s.\{-}\sin('
   endif
   let pos = getpos(".")
   let lnum = search(pt, "cbeW")
@@ -664,23 +738,31 @@ function s:PtDic()
         \ : shiftwidth(),
         \ s:front. '\<\%(while\|until\|for\|select\)\>\%(.*;\s*done\>\)\@!\zs'
         \ : shiftwidth(),
-        \ s:front. '\<case\>\%(.*;;\s*esac\>\)\@!\zs'
+        \ s:front. '\<case\>\%(.*;[;&|]\s*esac\>\)\@!\zs'
         \ : (g:sh_indent_case_labels ? shiftwidth() : 0),
-        \ s:front. '\<foreach\>\%(.*;\s*end\>\)\@!\zs'
+        \ s:front. '\<foreach\>\%(.*;\s*\%(end\|done\)\>\)\@!\zs'
         \ : (s:IsFtZsh() ? shiftwidth() : 0),
         \ '\%(\<then\>.*\|\<else\>.*\)\@<!;\s*fi\>\%(\s*[)}]\)\@!\zs'
         \ : shiftwidth() * -1,
         \ '\%(\<do\>.*\)\@<!;\s*done\>\%(\s*[)}]\)\@!\zs'
         \ : shiftwidth() * -1,
-        \ '\%(\<case\>.*\)\@<!;;\s*esac\>\%(\s*[)}]\)\@!\zs'
+        \ '\%(\<case\>.*\)\@<!;[;&|]\s*esac\>\%(\s*[)}]\)\@!\zs'
         \ : (g:sh_indent_case_labels ? shiftwidth() * -2 : shiftwidth() * -1)
         \ }
+endfunction
+
+function s:SetZshSubstString()
+  syn cluster zshSubst       add=zshSubstString
+  syn region  zshSubstString matchgroup=zshSubstDelim start='\${' end='}'
+        \ contains=@zshSubst,zshBrackets,zshQuoted,zshString fold
+  hi def link zshSubstString zshSubst
+  let b:sh_indent_synhi = 1
 endfunction
 
 let s:front = '\%(\%(^\|;\)\s*\%(then\s\|do\s\|else\s\)\=\|)\|(\|`\|{\s\)\s*'
 let s:rear1 = '\%(\\\=$\|\s\|;\|&\||\|<\|>\|)\|}\|`\)'
 let s:rear2 = '\%(\\\=$\|\s\|(\)'
-let s:noesc = '\\\@<!\%(\\\\\)*'
+let s:noesc = '\\\@1<!\%(\\\\\)*'
 
 let s:noret = '\c'. 'string$\|.....quote$'
 let s:quote = '\c'. 'string$\|...quote$'
