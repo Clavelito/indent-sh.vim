@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Sat, 09 Nov 2019 16:02:31 +0900
-" Version:          5.21
+" Last Change:      Wed, 03 Jun 2020 23:41:02 +0900
+" Version:          5.22
 
 
 if exists("b:did_indent")
@@ -108,7 +108,7 @@ function s:PrevLineIndent(cline, line, lnum, pline, pnum)
   if s:IsDoThen(a:line, a:lnum) && !s:CsInd && a:line !~# '^\s*[})]'
     let ind = s:DoThenIndent(a:line, a:lnum, ind)
   elseif s:IsContinue(a:line, a:lnum) || s:IsHeadContinue(a:cline, v:lnum)
-    call s:OvrdIndentKeys("*<CR>")
+    call s:OvrdIndentKeys("*<CR>,*<NL>")
   else
     let BPos = s:IsCloseBrace(a:line, a:lnum)
     let PPos = s:IsCloseParen(a:line, a:lnum)
@@ -418,7 +418,7 @@ function s:CloseTailBraceIndent(lnum, ind)
   else
     let item = [
           \ '\<\%(if\|elif\|while\|until\)\s\+\%(!\s\+\)\=\zs{'
-          \. '\|\<function\%(\s\+\S\+\)\=\s\+\zs{'
+          \. '\|\<function\s\+\S\+\s\+\zs{'
           \. '\|\%({\s\+\)\@<={\|\%(&&\|||\=\|)\)\s*\%(!\s\)\=\s*\zs{'
           \. '\|'. s:front. '\%(!\s\)\=\s*\zs{',
           \ '\%(^\|\%([;)]\|}\@1<=\s\)\s*\%(done\|fi\)\=\|;[;&|]\s*esac\)\s*}',
@@ -667,6 +667,8 @@ function s:IsCase(l, n)
       let head = s:noesc. ')\s*'
     endif
     call setpos(".", pos2)
+  elseif s:IsOutside(a:l, a:n, s:noesc. '[;&|]\ze\s*'. tail)
+    return 1
   endif
   return s:IsOutside(a:l, a:n, head. tail)
 endfunction
@@ -779,7 +781,7 @@ function s:PtDic()
         \ : shiftwidth(),
         \ s:front. '\<\%(while\|until\|for\|select\)\>\%(.*[;)}]\s*done\>\)\@!\zs'
         \ : shiftwidth(),
-        \ s:front. '\<case\>\%(.*;[;&|]\s*esac\>\)\@!\zs'
+        \ '\%('. s:front. '\|[&|]\s*\)\<case\>\%(.*;[;&|]\s*esac\>\)\@!\zs'
         \ : (g:sh_indent_case_labels ? shiftwidth() : 0),
         \ s:front. '\<foreach\>\%(.*[;)}]\s*\%(end\|done\)\>\)\@!\zs'
         \ : (s:IsFtZsh() ? shiftwidth() : 0),
