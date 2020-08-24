@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Fri, 21 Aug 2020 09:31:50 +0900
-" Version:          5.23
+" Last Change:      Mon, 24 Aug 2020 21:56:35 +0900
+" Version:          5.24
 
 
 if exists("b:did_indent")
@@ -284,13 +284,16 @@ function s:DoThenIndent(l, n, i)
   let lnum = a:n - 1
   let sum = 2
   while lnum && sum
-    if indent(lnum) < a:i && !s:IsInside(lnum, 1)
-      let sum -= 1
-      if strlen(pt2) && getline(lnum) =~# pt2
+    if indent(lnum) < a:i
+      let line = getline(lnum)
+      if line =~# '^\s*\%(#\|$\)\|^"\s*\%(;\|#\|$\)' || s:IsInside(lnum, 1)
+        let sum += 1
+      elseif strlen(pt2) && line =~# pt2
         break
-      elseif s:IsOutside(getline(lnum), lnum, pt1)
+      elseif s:IsOutside(line, lnum, pt1)
         return indent(lnum)
       endif
+      let sum -= 1
     endif
     let lnum -= 1
   endwhile
@@ -460,9 +463,6 @@ function s:CloseTailIndent(lnum, ind, item)
     let ind -= searchpair(pt1, "", pt2, "mbW", expr, lnum)
     let ind = s:IsCaseLabel(lnum) ? ind + 1 : ind
     let ind = indent(lnum) + ind * shiftwidth() + s:CsInd
-  elseif lnum == a:lnum && s:CsInd > 0
-        \ && getline(lnum)[0 : col(".") - 1] =~# '\%(;\|))\=\|\]\]\)\s*{$'
-    let ind -= s:CsInd
   endif
   call setpos(".", pos)
   return ind
@@ -697,7 +697,8 @@ function s:IsBackSlash(l, n)
 endfunction
 
 function s:IsBackSlashOnly(l, n)
-  let pt = '\%(\%(\%(&&\|||\|\%([;|]\@1<!\&'. s:noesc. '\)|&\=\)\s*\)\@<!\&'. s:noesc. '\)\\$'
+  let pt = '\%(\%(\%(&&\|||\|\%([;|]\@1<!\&'. s:noesc. '\)|&\=\)\s*\)\@<!'
+        \. '\&\%(^\s*\%(if\|elif\|while\|until\)\>\s*\)\@<!\&'. s:noesc. '\)\\$'
   return a:l =~# pt && !s:IsInside(a:n, a:l)
 endfunction
 
