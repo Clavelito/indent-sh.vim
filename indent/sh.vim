@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Wed, 24 Mar 2021 06:57:48 +0900
-" Version:          5.25
+" Last Change:      Fri, 26 Mar 2021 22:12:43 +0900
+" Version:          5.26
 
 
 if exists("b:did_indent")
@@ -12,7 +12,7 @@ let b:did_indent = 1
 
 setlocal indentexpr=GetShIndent()
 setlocal indentkeys+=0=then,0=do,0=elif,0=fi,0=esac,0=done
-setlocal indentkeys+=0=end,0=&&,0<Bar>
+setlocal indentkeys+=0=end,0),0=&&,0<Bar>
 setlocal indentkeys-=:,0#
 
 let b:undo_indent = 'setlocal indentexpr< indentkeys<'
