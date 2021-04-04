@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Sun, 04 Apr 2021 10:14:18 +0900
-" Version:          5.27
+" Last Change:      Sun, 04 Apr 2021 13:16:39 +0900
+" Version:          5.28
 
 
 if exists("b:did_indent")
@@ -606,7 +606,7 @@ function s:IsFtZsh()
 endfunction
 
 function s:IsOpenBrace(l, n)
-  let pt = '\%(^\|;\|&&\|||\=\)[^])#]*\%((\s*)\s*\)\=\$\@1<!{\ze\s*\%(#.*\)\=$'
+  let pt = '\%(^\|;\|&&\|||\=\)[^])#]*\%((\s*)\s*\)\=\%(\$\@1<!\&'.s:noesc.'\){\ze\s*\%(#.*\)\=$'
   return s:IsOutside(a:l, a:n, pt)
 endfunction
 
