@@ -1,8 +1,8 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Fri, 26 Mar 2021 22:12:43 +0900
-" Version:          5.26
+" Last Change:      Sun, 04 Apr 2021 10:14:18 +0900
+" Version:          5.27
 
 
 if exists("b:did_indent")
@@ -201,9 +201,6 @@ function s:ControlStatementIndent(line, lnum, ind, ...)
         endif
       endfor
     endfor
-  elseif s:IsForSelect(a:line, a:lnum)
-        \ || s:IsExprCont(a:line, a:lnum) || s:IsExprStat(a:line, a:lnum)
-    let ind += shiftwidth()
   endif
   let s:CsInd = ind - a:ind
   return ind
@@ -609,10 +606,7 @@ function s:IsFtZsh()
 endfunction
 
 function s:IsOpenBrace(l, n)
-  let pt = '\%(^\|;\|&&\|||\=\)\s*\%(!\s\)\=\s*{\ze\s*\%(#.*\)\=$'
-        \.'\|\%(^\|&&\|||\)\s*\%(\h\w*\|\S\+\)\=\s*()\s*{\ze\s*\%(#.*\)\=$'
-        \.'\|\%(^\|&&\|||\)\s*function\s\+\S\+\%(\s*()\)\=\s*{\ze\s*\%(#.*\)\=$'
-        \.'\|\%(^\|&&\|||\)\s*function\%(\s*()\)\=\s*{\ze\s*\%(#.*\)\=$'
+  let pt = '\%(^\|;\|&&\|||\=\)[^])#]*\%((\s*)\s*\)\=\$\@1<!{\ze\s*\%(#.*\)\=$'
   return s:IsOutside(a:l, a:n, pt)
 endfunction
 
@@ -702,16 +696,6 @@ function s:IsExprCont(l, n)
   return s:IsOutside(a:l, a:n, pt)
 endfunction
 
-function s:IsExprStat(l, n)
-  let pt = s:front. '\<\%(if\|elif\|while\|until\)\ze\s\+[^#\\[:blank:]]'
-  return s:IsOutside(a:l, a:n, pt)
-endfunction
-
-function s:IsForSelect(...)
-  let pt = s:front. '\<\%(for\|select\)\s\+\h\w*\s\+in\ze\%(\s\|\\$\)'
-  return s:IsOutside(a:1, a:2, pt)
-endfunction
-
 function s:IsBackSlash(l, n)
   return a:l =~# s:noesc. '\\$' && !s:IsComment(a:n, a:l)
 endfunction
@@ -739,9 +723,9 @@ endfunction
 
 function s:IsDoThen(l, n)
   let pt = '\%('. s:front. '\<\%(if\|elif\)\>.*\)\@<!'
-        \. '\%(;\|\]\]\|))\=\|}\)\s*then\>\%(.*[;)}]\s*fi\>\)\@!'
+        \. '\%(;\|\]\]\|))\=\|}\)\s*then\>\%(.*[;&)}]\s*fi\>\)\@!'
         \. '\|\%('. s:front. '\<\%(while\|until\|for\|select\)\>.*\)\@<!'
-        \. '\%(;\|\]\]\|))\=\|}\)\s*do\>\%(.*[;)}]\s*done\>\)\@!'
+        \. '\%(;\|\]\]\|))\=\|}\)\s*do\>\%(.*[;&)}]\s*done\>\)\@!'
   return s:IsOutside(a:l, a:n, pt)
 endfunction
 
@@ -817,6 +801,14 @@ function s:PtDic()
         \ '\%(;\|\]\]\|))\=\|}\)\s*\%(do\|then\)'. s:rear2. '\zs'
         \ : shiftwidth(),
         \ '^\s*\%(do\|then\|else\)'. s:rear2. '\zs'
+        \ : shiftwidth(),
+        \ s:front. '\<\%(if\|elif\|while\|until\)\zs\%(\s*\\\=\|\s\+#.*\)$'
+        \ : shiftwidth(),
+        \ s:front. '\<\%(if\|elif\|while\|until\)\s\+[^#\\[:blank:]]\%(.*\%(;\|\]\]\|))\=\|}\)\s*\%(do\|then\)\>\)\@!\zs'
+        \ : shiftwidth(),
+        \ s:front. '\<\%(for\|select\)\s\+\h\w*\s\+in\%(\s\%(.*;\s*\%(do\|then\)\>\)\@!\|\\$\)\zs'
+        \ : shiftwidth(),
+        \ s:front. '\<for\s\+\h\w*\s\+do\zs\s*\%(\s#.*\)\=$'
         \ : shiftwidth(),
         \ '\<case\s.*\sin\zs\%(\s\+#.*\|\s*\)$'
         \ : (g:sh_indent_case_labels ? shiftwidth() : 0),
