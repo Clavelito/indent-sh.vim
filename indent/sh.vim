@@ -1,8 +1,11 @@
 " Vim indent file
 " Language:         Shell Script
 " Author:           Clavelito <maromomo@hotmail.com>
-" Last Change:      Sun, 04 Apr 2021 13:16:39 +0900
-" Version:          5.28
+" Last Change:      Tue, 06 Apr 2021 15:56:28 +0900
+" Version:          5.29
+" Description:      No warranty Please try at your own risk.
+"                   If you do not want to indent case labels, set the next line.
+"                   let g:sh_indent_case_labels = 0
 
 
 if exists("b:did_indent")
@@ -808,7 +811,7 @@ function s:PtDic()
         \ : shiftwidth(),
         \ s:front. '\<\%(for\|select\)\s\+\h\w*\s\+in\%(\s\%(.*;\s*\%(do\|then\)\>\)\@!\|\\$\)\zs'
         \ : shiftwidth(),
-        \ s:front. '\<for\s\+\h\w*\s\+do\zs\s*\%(\s#.*\)\=$'
+        \ s:front. '\<\%(for\|select\)\s\+\h\w*\s\+do\zs\s*\%(\s#.*\)\=$'
         \ : shiftwidth(),
         \ '\<case\s.*\sin\zs\%(\s\+#.*\|\s*\)$'
         \ : (g:sh_indent_case_labels ? shiftwidth() : 0),
